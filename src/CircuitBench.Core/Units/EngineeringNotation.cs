@@ -133,8 +133,15 @@ public static class EngineeringNotation
 
         var e = number.IndexOfAny(['e', 'E']);
         var mantissa = e < 0 ? number : number[..e];
-        var exponent = e < 0 ? 0 : int.Parse(number[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
-        return double.Parse($"{mantissa}E{exponent + suffixExponent}", NumberStyles.Float, CultureInfo.InvariantCulture);
+        long exponent = 0;
+        if (e >= 0 && !long.TryParse(number[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+        {
+            // 指數超出 long 範圍：極大視為溢位（交由呼叫端回報錯誤），極小視為 0
+            return number[e + 1] == '-' ? 0 : double.PositiveInfinity;
+        }
+
+        var total = Math.Clamp(exponent + suffixExponent, -100_000, 100_000);
+        return double.Parse($"{mantissa}E{total}", NumberStyles.Float, CultureInfo.InvariantCulture);
     }
 
     private static int ReadSuffix(string s, ref int i)

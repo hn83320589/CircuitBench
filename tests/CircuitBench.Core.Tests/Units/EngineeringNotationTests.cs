@@ -86,12 +86,24 @@ public class EngineeringNotationTests
     [InlineData("1 k")]
     [InlineData("-")]
     [InlineData("1,5")]
+    [InlineData("1e99999999999k")]
+    [InlineData("1e999999999999999999999")]
+    [InlineData("1e400")]
     public void InvalidInputIsRejectedWithChineseMessage(string text)
     {
         Assert.False(EngineeringNotation.TryParse(text, out _, out var error));
         Assert.False(string.IsNullOrWhiteSpace(error.MessageZh));
         Assert.Matches(@"\p{IsCJKUnifiedIdeographs}", error.MessageZh);
         Assert.Throws<FormatException>(() => EngineeringNotation.Parse(text));
+    }
+
+    [Theory]
+    [InlineData("1e-99999999999k")]
+    [InlineData("1e-999999999999999999999u")]
+    public void HugeNegativeExponentUnderflowsToZero(string text)
+    {
+        Assert.True(EngineeringNotation.TryParse(text, out var value, out _));
+        Assert.Equal(0, value);
     }
 
     [Fact]

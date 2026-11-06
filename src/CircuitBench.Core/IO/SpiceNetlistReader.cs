@@ -84,6 +84,43 @@ public static class SpiceNetlistReader
         return new SpiceParseResult(new SpiceDeck(Circuit.Create(components), analyses, title), errors);
     }
 
+    /// <summary>
+    /// 解析電源規格文字（與網表相同語法，例如 "DC 5 AC 1 0 SIN(0 1 1k)"），供圖面參數使用。
+    /// 失敗時回傳中文錯誤訊息。
+    /// </summary>
+    public static bool TryParseSourceSpec(string text, string componentName, out SourceSpec spec, out string error)
+    {
+        try
+        {
+            spec = ParseSource(Tokenize(text), 0, componentName);
+            error = string.Empty;
+            return true;
+        }
+        catch (ParseException ex)
+        {
+            spec = SourceSpec.FromDc(0);
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>解析以空白分隔的時間清單（開關切換時間）。</summary>
+    public static bool TryParseNumberList(string text, string what, out ImmutableArray<double> values, out string error)
+    {
+        try
+        {
+            values = [.. Tokenize(text).Select(t => Number(t, what))];
+            error = string.Empty;
+            return true;
+        }
+        catch (ParseException ex)
+        {
+            values = [];
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static void Try(LogicalLine line, List<SpiceLineError> errors, Action action)
     {
         try
@@ -93,6 +130,11 @@ public static class SpiceNetlistReader
         catch (ParseException ex)
         {
             errors.Add(new SpiceLineError(line.LineNumber, ex.Message));
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException)
+        {
+            // 防禦：任何非預期的格式問題都轉成該行的錯誤，不讓匯入崩潰
+            errors.Add(new SpiceLineError(line.LineNumber, $"無法解析此行：{ex.Message}"));
         }
     }
 
