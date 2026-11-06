@@ -37,6 +37,9 @@ public abstract class Device(string name)
     /// <summary>元件自身的轉折時刻（電源波形、開關切換）。</summary>
     public virtual IEnumerable<double> Breakpoints(double tStart, double tStop) => [];
 
+    /// <summary>驅動訊號的週期（SIN 電源）；暫態分析會據此限制步長，讓畫出的波形平滑。</summary>
+    public virtual double? DrivingPeriod => null;
+
     /// <summary>
     /// 支路電流（兩端元件：由第一個端點經元件流向第二個端點為正）。
     /// 暫態中電容電流取自上次接受的步驟。

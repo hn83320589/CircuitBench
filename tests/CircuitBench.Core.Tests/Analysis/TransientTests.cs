@@ -53,9 +53,8 @@ public class TransientTests
             new Inductor("L1", "a", "b", l),
             new Capacitor("C1", "b", "0", cap),
         ]);
-        // 振盪電路依 README 建議：最大步長設為振盪週期的 1/100（TR 的衰減率誤差約為 (ωh)²/4）
-        var period = 2 * Math.PI * Math.Sqrt(l * cap);
-        var res = _sim.Transient(c, new TransientRequest(2e-3, period / 100), SimulationOptions.Default);
+        // 使用預設設定（最大步長 = 停止時間/50）：自由振盪的步長必須由分析器自動限制
+        var res = _sim.Transient(c, new TransientRequest(2e-3), SimulationOptions.Default);
         var t = res.Data.X;
         var v = res.Data[SignalId.V("b")].Select(x => x - 1).ToArray(); // 減去終值
 
@@ -143,6 +142,35 @@ public class TransientTests
         var res = _sim.Transient(deck.Circuit, new TransientRequest(10e-3, 20e-6), SimulationOptions.Default);
         Assert.Equal(0, WaveformMath.StepwiseAlternations(res.Data[SignalId.V("sw")], 1e-3));
         Assert.Equal(0, WaveformMath.StepwiseAlternations(res.Data[SignalId.I("L1")], 1e-6));
+    }
+
+    [Fact]
+    public void SineDrivenResistiveCircuitGetsAtLeastFiftyPointsPerPeriod()
+    {
+        // 純電阻電路沒有狀態量，LTE 恆為 0；SIN 電源的步長上限必須自動生效
+        var c = Circuit.Create([
+            new VoltageSource("V1", "a", "0", new SourceSpec(null, new SineWaveform(0, 1, 1e3), null)),
+            new Resistor("R1", "a", "0", 1e3),
+        ]);
+        var t = _sim.Transient(c, new TransientRequest(10e-3), SimulationOptions.Default).Data.X;
+        var maxGap = t.Zip(t.Skip(1), (a, b) => b - a).Max();
+        Assert.True(maxGap <= 1e-3 / 50 * (1 + 1e-9), $"最大步長 {maxGap:E3} s 超過週期/50");
+    }
+
+    [Fact]
+    public void FreeOscillationStepCapExpiresAfterOscillationDies()
+    {
+        // 強阻尼後的長時間平穩段不應一直維持每週期 100 點的限制（避免無謂的點數）
+        var c = Circuit.Create([
+            new VoltageSource("V1", "in", "0", new SourceSpec(null, new PulseWaveform(0, 1, 1e-5, 1e-9, 1e-9, 1, 0), null)),
+            new Resistor("R1", "in", "a", 20),
+            new Inductor("L1", "a", "b", 1e-3),
+            new Capacitor("C1", "b", "0", 1e-6),
+        ]);
+        var res = _sim.Transient(c, new TransientRequest(50e-3), SimulationOptions.Default);
+        var t = res.Data.X;
+        var late = t.Count(x => x > 25e-3);
+        Assert.True(late < 200, $"振盪衰減後仍有 {late} 點");
     }
 
     // ---------- 驗收標準 10：轉折點 ----------
@@ -286,5 +314,14 @@ public class TransientTests
         }
 
         Assert.True(worst <= 0.005 * peak, $"與參考解最大誤差 {worst:E3} V（{t.Length} 點）");
+
+        // 畫面上看到的是各點連成的折線：在參考解的每個時間點上比較折線與真實波形
+        var displayed = 0.0;
+        for (var i = 0; i < rt.Length; i++)
+        {
+            displayed = Math.Max(displayed, Math.Abs(WaveformMath.Interpolate(t, v, rt[i]) - rv[i]));
+        }
+
+        Assert.True(displayed <= 0.005 * peak, $"預設設定下畫出的折線與真實波形最大差 {displayed:E3} V（{displayed / peak:P2} 峰值，{t.Length} 點）");
     }
 }

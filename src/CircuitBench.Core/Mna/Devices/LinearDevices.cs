@@ -6,6 +6,9 @@ namespace CircuitBench.Core.Mna.Devices;
 
 internal static class SourceValues
 {
+    public static double? SinePeriod(SourceSpec spec) =>
+        spec.Waveform is SineWaveform { Freq: > 0 } s && s.Va != 0 ? 1 / s.Freq : null;
+
     /// <summary>直流取直流值（或掃描覆寫）；暫態起點的工作點與暫態取波形值。</summary>
     public static double Evaluate(SourceSpec spec, double? dcOverride, RealLoadContext ctx) =>
         ctx.Mode == LoadMode.Dc && !ctx.UseWaveformsInDc
@@ -184,6 +187,8 @@ internal sealed class VoltageSourceDevice(VoltageSource model, int p, int q, int
 
     public override IEnumerable<double> Breakpoints(double tStart, double tStop) => model.Spec.Transient.Breakpoints(tStart, tStop);
 
+    public override double? DrivingPeriod => SourceValues.SinePeriod(model.Spec);
+
     public override double Current(double[] x, RealLoadContext ctx) => x[k];
 }
 
@@ -214,6 +219,8 @@ internal sealed class CurrentSourceDevice(CurrentSource model, int p, int q) : D
     }
 
     public override IEnumerable<double> Breakpoints(double tStart, double tStop) => model.Spec.Transient.Breakpoints(tStart, tStop);
+
+    public override double? DrivingPeriod => SourceValues.SinePeriod(model.Spec);
 
     public override double Current(double[] x, RealLoadContext ctx) => Value(ctx) * ctx.SourceScale;
 }

@@ -144,6 +144,8 @@
                   <CheckBox Content="每十倍頻（對數）" IsChecked="{Binding AnalysisForm.AcDecade}" />
                 </StackPanel>
               </Grid>
+              <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#666"
+                         Text="暫態步長會自動限制：SIN 電源每週期至少 50 點、自由振盪每週期約 100 點，並控制折線與真實波形的差距。需要更細的波形時可再設定最大步長。" />
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="執行分析 (F5)" Command="{Binding Analysis.RunCommand}" Classes="accent" x:Name="RunButton" />
                 <Button Content="取消" Command="{Binding Analysis.CancelCommand}" />

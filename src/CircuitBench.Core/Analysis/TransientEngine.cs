@@ -21,6 +21,11 @@ internal sealed class TransientEngine(
 {
     private const int BackwardEulerSteps = 2;
 
+    /// <summary>SIN 電源每週期的最少點數。</summary>
+    public const int SinePointsPerPeriod = 50;
+
+    private readonly OscillationTracker _oscillation = new();
+
     private enum Phase
     {
         BackwardEuler,
@@ -37,6 +42,15 @@ internal sealed class TransientEngine(
     {
         var stop = request.StopTime;
         var maxStep = request.EffectiveMaxStep;
+
+        // SIN 驅動：每週期至少 SinePointsPerPeriod 點，否則畫出的折線與真實正弦明顯不同
+        foreach (var d in system.Devices)
+        {
+            if (d.DrivingPeriod is { } period)
+            {
+                maxStep = Math.Min(maxStep, period / SinePointsPerPeriod);
+            }
+        }
         if (!(stop > 0) || !double.IsFinite(stop))
         {
             throw new SimulationException("暫態分析的停止時間必須大於 0。");
@@ -102,7 +116,7 @@ internal sealed class TransientEngine(
             }
 
             var bp = breakpoints[nextBp];
-            h = Math.Min(h, maxStep);
+            h = Math.Min(h, Math.Min(maxStep, _oscillation.StepCap(t)));
             double tNew;
             var landsOnBreakpoint = false;
             if (t + h >= bp)
@@ -161,6 +175,16 @@ internal sealed class TransientEngine(
                 continue;
             }
 
+            // 內插誤差控制：結果以折線顯示與量測，要求每段折線與真實波形的差（≈ h²|x″|/8）在容許值內。
+            // 純電阻電路沒有狀態量、LTE 恆為 0，這是唯一能讓驅動波形與二極體轉折處畫得準的限制。
+            var interpolationRatio = InterpolationErrorRatio(tNew, x, xNew, t);
+            if (interpolationRatio > 1)
+            {
+                rejected++;
+                h = hActual * Math.Max(0.25, 0.9 / Math.Sqrt(interpolationRatio));
+                continue;
+            }
+
             // TR 振盪檢查：某個未知數在這一步反向時，以 BDF2 重算同一步；
             // 兩者明顯不一致代表是剛性模態造成的 TR 正負交替，改用 BDF2 的結果。
             var ringingDetected = false;
@@ -198,14 +222,21 @@ internal sealed class TransientEngine(
 
             _times.Add(t);
             recorder.Record(x);
+            _oscillation.Observe(t, CollectStates(x), _isVoltage, options);
 
             var grow = ratio < 0 ? 1 : ratio == 0 ? 2 : Math.Min(2, 0.9 * Math.Pow(ratio, -1.0 / (order + 1)));
+            if (interpolationRatio > 0)
+            {
+                grow = Math.Min(grow, 0.9 / Math.Sqrt(interpolationRatio));
+            }
+
             var hNext = hActual * Math.Max(grow, 0.25);
 
             if (landsOnBreakpoint)
             {
                 // 轉折點：歷史從下一個點重新開始，先走 BE
                 _history.Clear();
+                _lastBreakpoint = t;
                 phase = Phase.BackwardEuler;
                 phaseSteps = 0;
                 var following = nextBp + 1 < breakpoints.Length ? breakpoints[nextBp + 1] - t : maxStep;
@@ -241,6 +272,40 @@ internal sealed class TransientEngine(
     }
 
     private double[]? _previousX;
+    private double _lastBreakpoint;
+
+    /// <summary>
+    /// 折線內插誤差比：以 (t(n−1), t(n), t(n+1)) 的二階除差估計 x″，誤差 ≈ h²·|x″|/8 = h²·|DD2|/4，
+    /// 除以容許值 trtol·(reltol·|x| + vntol 或 abstol)。跨越轉折點的除差沒有意義，不檢查。
+    /// </summary>
+    private double InterpolationErrorRatio(double tNew, double[] x, double[] xNew, double t)
+    {
+        if (_previousX is not { } xPrev || _times.Count < 2)
+        {
+            return -1;
+        }
+
+        var tPrev = _times[^2];
+        if (tPrev <= _lastBreakpoint)
+        {
+            return -1;
+        }
+
+        var h = tNew - t;
+        var worst = 0.0;
+        for (var i = 0; i < x.Length; i++)
+        {
+            var d01 = (x[i] - xPrev[i]) / (t - tPrev);
+            var d12 = (xNew[i] - x[i]) / h;
+            var dd2 = (d12 - d01) / (tNew - tPrev);
+            var err = h * h * Math.Abs(dd2) / 4;
+            var magnitude = Math.Max(Math.Abs(xNew[i]), Math.Max(Math.Abs(x[i]), Math.Abs(xPrev[i])));
+            var tol = options.TrTol * (options.RelTol * magnitude + (system.Layout.IsVoltageUnknown(i) ? options.VnTol : options.AbsTol));
+            worst = Math.Max(worst, err / tol);
+        }
+
+        return worst;
+    }
 
     private double UnknownTolerance(int i, double a, double b) =>
         options.RelTol * Math.Max(Math.Abs(a), Math.Abs(b)) + (system.Layout.IsVoltageUnknown(i) ? options.VnTol : options.AbsTol);
@@ -459,5 +524,91 @@ internal sealed class TransientEngine(
 
             return new RealSignalSet([.. times], signals, "時間 (s)");
         }
+    }
+}
+
+/// <summary>
+/// 自由振盪的步長限制。LTE 控制的是每一步的局部誤差，不是長時間累積的相位與衰減誤差；
+/// TR 的頻率誤差約 (ωh)²/12、衰減率誤差約 (ωh)²/4，要達到 0.2% 需要每週期約 100 步。
+/// 做法：追蹤每個狀態量（電容電壓、電感電流）的相鄰極值。兩個極值相隔約半個週期，
+/// 且擺動幅度遠大於容許值時視為振盪，把步長上限設為「估計週期 / PointsPerPeriod」。
+/// 超過 4 個半週期沒有新的極值（振盪停止或已衰減到容許值以下）就解除限制。
+/// </summary>
+internal sealed class OscillationTracker
+{
+    public const int PointsPerPeriod = 100;
+
+    private double[] _prev = [];
+    private int[] _dir = [];
+    private double[] _lastExtremumTime = [];
+    private double[] _lastExtremumValue = [];
+    private double[] _halfPeriod = [];
+    private double _prevTime;
+    private bool _hasPrev;
+
+    /// <summary>目前的步長上限（沒有振盪時為無限大）。</summary>
+    public double StepCap(double t)
+    {
+        var cap = double.PositiveInfinity;
+        for (var i = 0; i < _halfPeriod.Length; i++)
+        {
+            var half = _halfPeriod[i];
+            if (half > 0 && t - _lastExtremumTime[i] <= 4 * half)
+            {
+                cap = Math.Min(cap, 2 * half / PointsPerPeriod);
+            }
+        }
+
+        return cap;
+    }
+
+    public void Observe(double t, double[] states, bool[] isVoltage, SimulationOptions options)
+    {
+        if (_prev.Length != states.Length)
+        {
+            _prev = new double[states.Length];
+            _dir = new int[states.Length];
+            _lastExtremumTime = Enumerable.Repeat(double.NaN, states.Length).ToArray();
+            _lastExtremumValue = new double[states.Length];
+            _halfPeriod = new double[states.Length];
+            _hasPrev = false;
+        }
+
+        if (_hasPrev)
+        {
+            for (var i = 0; i < states.Length; i++)
+            {
+                var d = states[i] - _prev[i];
+                var dir = Math.Sign(d);
+                if (dir == 0)
+                {
+                    continue;
+                }
+
+                if (_dir[i] != 0 && dir != _dir[i])
+                {
+                    // 前一點是極值
+                    var extremeTime = _prevTime;
+                    var extremeValue = _prev[i];
+                    if (!double.IsNaN(_lastExtremumTime[i]))
+                    {
+                        var swing = Math.Abs(extremeValue - _lastExtremumValue[i]);
+                        var tol = options.RelTol * Math.Max(Math.Abs(extremeValue), Math.Abs(_lastExtremumValue[i])) +
+                                  (isVoltage[i] ? options.VnTol : options.AbsTol);
+                        var half = extremeTime - _lastExtremumTime[i];
+                        _halfPeriod[i] = swing > 100 * tol && half > 0 ? half : 0;
+                    }
+
+                    _lastExtremumTime[i] = extremeTime;
+                    _lastExtremumValue[i] = extremeValue;
+                }
+
+                _dir[i] = dir;
+            }
+        }
+
+        Array.Copy(states, _prev, states.Length);
+        _prevTime = t;
+        _hasPrev = true;
     }
 }
