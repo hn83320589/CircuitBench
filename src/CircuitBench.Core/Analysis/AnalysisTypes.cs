@@ -15,8 +15,10 @@ public sealed record SimulationOptions
 
     public int MaxNewtonIterations { get; init; } = 100;
 
-    /// <summary>暫態 LTE 容許值的放大係數（同 SPICE trtol）。</summary>
-    public double TrTol { get; init; } = 7;
+    /// <summary>
+    /// 暫態 LTE 容許值的放大係數（意義同 SPICE trtol，但預設 1 而非 7，以換取較高精度）。
+    /// </summary>
+    public double TrTol { get; init; } = 1;
 
     /// <summary>暫態結果最多時間點數。</summary>
     public int MaxTimePoints { get; init; } = 5_000_000;

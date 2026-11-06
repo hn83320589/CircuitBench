@@ -51,11 +51,12 @@ internal sealed class SwitchDevice(TimedSwitch model, int p, int q) : Device(mod
         _slots.Voltage(x) * Conductance(ctx.Mode == LoadMode.Dc ? 0 : ctx.Time);
 }
 
-/// <summary>電容：直流開路；暫態使用 BE 或梯形伴隨模型。</summary>
+/// <summary>電容：直流開路；暫態依積分係數組出伴隨模型 i = G·v + Ieq。</summary>
 internal sealed class CapacitorDevice(string name, int p, int q, double capacitance) : Device(name)
 {
     private TwoTerminalSlots _slots = new(p, q);
     private double _vPrev;
+    private double _vPrev2;
     private double _iPrev;
 
     public override void Register(PatternBuilder pattern) => _slots.Register(pattern);
@@ -64,14 +65,8 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
 
     private (double G, double Ieq) Companion(RealLoadContext ctx)
     {
-        if (ctx.Method == IntegrationMethod.Trapezoidal)
-        {
-            var g = 2 * capacitance / ctx.TimeStep;
-            return (g, g * _vPrev + _iPrev);
-        }
-
-        var gb = capacitance / ctx.TimeStep;
-        return (gb, gb * _vPrev);
+        var k = ctx.Coefficients;
+        return (capacitance * k.A0, capacitance * (k.A1 * _vPrev + k.A2 * _vPrev2) + k.B * _iPrev);
     }
 
     public override void Load(RealLoadContext ctx)
@@ -83,7 +78,7 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
 
         var (g, ieq) = Companion(ctx);
         _slots.Stamp(ctx.Matrix, g);
-        _slots.StampCurrent(ctx.Rhs, -ieq);
+        _slots.StampCurrent(ctx.Rhs, ieq);
     }
 
     public override void LoadAc(ComplexLoadContext ctx) =>
@@ -91,7 +86,7 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
 
     public override void InitializeTransient(double[] x)
     {
-        _vPrev = _slots.Voltage(x);
+        _vPrev = _vPrev2 = _slots.Voltage(x);
         _iPrev = 0;
     }
 
@@ -99,7 +94,8 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
     {
         var (g, ieq) = Companion(ctx);
         var v = _slots.Voltage(x);
-        _iPrev = g * v - ieq;
+        _iPrev = g * v + ieq;
+        _vPrev2 = _vPrev;
         _vPrev = v;
     }
 
@@ -109,11 +105,12 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
         states.Add(new StateQuantity(_slots.Voltage(x), IsVoltage: true));
 }
 
-/// <summary>電感：以支路電流為未知數；直流為短路。</summary>
+/// <summary>電感：以支路電流為未知數；直流為短路。暫態：v = L·i' 以積分係數近似。</summary>
 internal sealed class InductorDevice(string name, int p, int q, int k, double inductance) : Device(name)
 {
     private BranchSlots _slots = new(p, q, k);
     private double _iPrev;
+    private double _iPrev2;
     private double _vPrev;
 
     public override void Register(PatternBuilder pattern) => _slots.Register(pattern, withDiagonal: true);
@@ -128,18 +125,10 @@ internal sealed class InductorDevice(string name, int p, int q, int k, double in
             return;
         }
 
-        if (ctx.Method == IntegrationMethod.Trapezoidal)
-        {
-            var r = 2 * inductance / ctx.TimeStep;
-            _slots.StampDiagonal(ctx.Matrix, -r);
-            ctx.Rhs[k] -= r * _iPrev + _vPrev;
-        }
-        else
-        {
-            var r = inductance / ctx.TimeStep;
-            _slots.StampDiagonal(ctx.Matrix, -r);
-            ctx.Rhs[k] -= r * _iPrev;
-        }
+        // 支路方程：v(P) − v(Q) − L·A0·i = L·(A1·i(n) + A2·i(n−1)) + B·v(n)
+        var c = ctx.Coefficients;
+        _slots.StampDiagonal(ctx.Matrix, -inductance * c.A0);
+        ctx.Rhs[k] += inductance * (c.A1 * _iPrev + c.A2 * _iPrev2) + c.B * _vPrev;
     }
 
     public override void LoadAc(ComplexLoadContext ctx)
@@ -150,12 +139,13 @@ internal sealed class InductorDevice(string name, int p, int q, int k, double in
 
     public override void InitializeTransient(double[] x)
     {
-        _iPrev = x[k];
+        _iPrev = _iPrev2 = x[k];
         _vPrev = _slots.Voltage(x);
     }
 
     public override void AcceptTransient(double[] x, RealLoadContext ctx)
     {
+        _iPrev2 = _iPrev;
         _iPrev = x[k];
         _vPrev = _slots.Voltage(x);
     }

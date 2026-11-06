@@ -4,26 +4,34 @@ using CircuitBench.Core.Mna.Devices;
 namespace CircuitBench.Core.Analysis;
 
 /// <summary>
-/// 暫態分析。
+/// 暫態分析（演算法說明另見 README）。
 /// <list type="bullet">
 /// <item>起點：以波形在 t=0 的值求直流工作點。</item>
-/// <item>積分：梯形法（TR）；在 t=0 與每個轉折點之後的前兩步改用後向尤拉（BE），
-/// 消除 TR 在不連續處的逐步正負交替振盪。</item>
-/// <item>步長：以狀態量（電容電壓、電感電流）的除差估計局部截斷誤差，
-/// 誤差比 &gt; 1 則拒絕並縮小步長；被拒絕的步驟不更新元件歷史，也不寫入結果。</item>
-/// <item>轉折點：電源轉折與開關切換時刻收集成佇列，步長會被截短，
-/// 並直接把時間設成轉折點的數值本身，因此誤差為 0。</item>
+/// <item>積分：t=0 與每個轉折點之後，先走兩步後向尤拉（BE），再用 BDF2
+/// （L-stable，剛性模態被衰減而不會正負交替）直到步長穩定，之後改用梯形法（TR，LC 能量守恆）。
+/// 若在 TR 期間偵測到連續正負交替，也會切回 BDF2。</item>
+/// <item>步長：以狀態量（電容電壓、電感電流）的除差估計局部截斷誤差；
+/// 誤差比 &gt; 1 則拒絕並縮小步長。被拒絕的步驟不更新元件歷史，也不寫入結果。</item>
+/// <item>轉折點：電源轉折與開關切換時刻收集成佇列。步長會被截短，並直接把時間設成轉折點本身，
+/// 因此時間誤差為 0。落在轉折點上的那一步以左極限（切換前）求值，下一步才使用切換後的狀態。</item>
 /// </list>
 /// </summary>
 internal sealed class TransientEngine(
     MnaSystem system, TransientRequest request, SimulationOptions options, MonotonicProgress progress, CancellationToken cancellation)
 {
-    private const int BackwardEulerStepsAfterBreakpoint = 2;
+    private const int BackwardEulerSteps = 2;
+
+    private enum Phase
+    {
+        BackwardEuler,
+        Bdf2,
+        Trapezoidal,
+    }
 
     private readonly List<double> _times = [];
     private readonly List<(double Time, double[] States)> _history = [];
     private readonly List<StateQuantity> _stateBuffer = [];
-    private double[] _stateScale = [];
+    private bool[] _isVoltage = [];
 
     public (RealSignalSet Data, int Iterations, int Accepted, int Rejected, ConvergenceMethod Method) Run()
     {
@@ -62,7 +70,7 @@ internal sealed class TransientEngine(
             d.InitializeTransient(x);
         }
 
-        // 2. 轉折點佇列
+        // 2. 轉折點佇列（含停止時間）
         var breakpoints = system.Devices
             .SelectMany(d => d.Breakpoints(0, stop))
             .Where(t => t > 0 && t < stop)
@@ -73,14 +81,14 @@ internal sealed class TransientEngine(
         var nextBp = 0;
 
         var recorder = new Recorder(system, request);
-        recorder.Record(0, x);
+        recorder.Record(x);
         _times.Add(0);
-        ResetHistory(0, x);
 
         ctx.Mode = LoadMode.Transient;
         var t = 0.0;
         var h = Math.Min(maxStep, breakpoints[0]) * 0.01;
-        var beStepsLeft = BackwardEulerStepsAfterBreakpoint;
+        var phase = Phase.BackwardEuler;
+        var phaseSteps = 0;
         var accepted = 0;
         var rejected = 0;
         var minStep = stop * 1e-14;
@@ -118,10 +126,23 @@ internal sealed class TransientEngine(
                 throw new SimulationException($"暫態分析在 t = {t:G6} s 附近的時間步長過小，無法繼續（可能是電路變化太劇烈）。");
             }
 
-            var method = beStepsLeft > 0 ? IntegrationMethod.BackwardEuler : IntegrationMethod.Trapezoidal;
-            ctx.Time = tNew;
-            ctx.TimeStep = hActual;
+            var method = phase switch
+            {
+                Phase.BackwardEuler => IntegrationMethod.BackwardEuler,
+                Phase.Bdf2 => IntegrationMethod.Bdf2,
+                _ => IntegrationMethod.Trapezoidal,
+            };
             ctx.Method = method;
+            ctx.TimeStep = hActual;
+            ctx.Coefficients = method switch
+            {
+                IntegrationMethod.BackwardEuler => IntegrationCoefficients.BackwardEuler(hActual),
+                IntegrationMethod.Bdf2 => IntegrationCoefficients.Bdf2(hActual, t - _times[^2]),
+                _ => IntegrationCoefficients.Trapezoidal(hActual),
+            };
+
+            // 落在轉折點的步驟以左極限求值（切換前的狀態）
+            ctx.Time = landsOnBreakpoint ? Math.BitDecrement(tNew) : tNew;
 
             var xNew = solver.Newton(x, 0, options.MaxNewtonIterations);
             if (xNew is null)
@@ -132,14 +153,15 @@ internal sealed class TransientEngine(
             }
 
             var ratio = ErrorRatio(tNew, xNew, method);
+            var order = method == IntegrationMethod.BackwardEuler ? 1 : 2;
             if (ratio > 1)
             {
                 rejected++;
-                h = hActual * Math.Max(0.25, 0.9 * Math.Pow(ratio, -1.0 / (Order(method) + 1)));
+                h = hActual * Math.Max(0.25, 0.9 * Math.Pow(ratio, -1.0 / (order + 1)));
                 continue;
             }
 
-            // 接受
+            // ---- 接受 ----
             foreach (var d in system.Devices)
             {
                 d.AcceptTransient(xNew, ctx);
@@ -154,26 +176,40 @@ internal sealed class TransientEngine(
             }
 
             _times.Add(t);
-            recorder.Record(t, x);
-            var grow = ratio <= 0 ? 2 : Math.Min(2, 0.9 * Math.Pow(ratio, -1.0 / (Order(method) + 1)));
+            recorder.Record(x);
+
+            var grow = ratio < 0 ? 1 : ratio == 0 ? 2 : Math.Min(2, 0.9 * Math.Pow(ratio, -1.0 / (order + 1)));
             var hNext = hActual * Math.Max(grow, 0.25);
 
             if (landsOnBreakpoint)
             {
-                ResetHistory(t, x);
-                beStepsLeft = BackwardEulerStepsAfterBreakpoint;
+                // 轉折點：歷史從下一個點重新開始，先走 BE
+                _history.Clear();
+                phase = Phase.BackwardEuler;
+                phaseSteps = 0;
                 var following = nextBp + 1 < breakpoints.Length ? breakpoints[nextBp + 1] - t : maxStep;
                 h = 0.1 * Math.Min(Math.Max(hNext, hActual), following);
             }
             else
             {
-                PushHistory(t, x);
-                if (beStepsLeft > 0)
-                {
-                    beStepsLeft--;
-                }
-
+                PushHistory(t, xNew);
+                phaseSteps++;
                 h = hNext;
+                switch (phase)
+                {
+                    case Phase.BackwardEuler when phaseSteps >= BackwardEulerSteps:
+                        phase = Phase.Bdf2;
+                        phaseSteps = 0;
+                        break;
+                    case Phase.Bdf2 when phaseSteps >= 3 && (hNext <= 1.25 * hActual || hActual >= 0.999 * maxStep):
+                        phase = Phase.Trapezoidal;
+                        phaseSteps = 0;
+                        break;
+                    case Phase.Trapezoidal when IsRinging():
+                        phase = Phase.Bdf2;
+                        phaseSteps = 0;
+                        break;
+                }
             }
 
             progress.Report(t / stop);
@@ -183,8 +219,6 @@ internal sealed class TransientEngine(
         return (recorder.Build(_times), solver.Iterations, accepted, rejected, opMethod);
     }
 
-    private static int Order(IntegrationMethod method) => method == IntegrationMethod.Trapezoidal ? 2 : 1;
-
     private double[] CollectStates(double[] x)
     {
         _stateBuffer.Clear();
@@ -193,9 +227,8 @@ internal sealed class TransientEngine(
             d.CollectStates(x, _stateBuffer);
         }
 
-        if (_stateScale.Length != _stateBuffer.Count)
+        if (_isVoltage.Length != _stateBuffer.Count)
         {
-            _stateScale = new double[_stateBuffer.Count];
             _isVoltage = _stateBuffer.Select(s => s.IsVoltage).ToArray();
         }
 
@@ -208,36 +241,36 @@ internal sealed class TransientEngine(
         return values;
     }
 
-    private bool[] _isVoltage = [];
-
-    private void ResetHistory(double t, double[] x)
-    {
-        _history.Clear();
-        PushHistory(t, x);
-    }
-
     private void PushHistory(double t, double[] x)
     {
-        var states = CollectStates(x);
-        for (var i = 0; i < states.Length; i++)
-        {
-            _stateScale[i] = Math.Max(_stateScale[i], Math.Abs(states[i]));
-        }
-
-        _history.Add((t, states));
-        if (_history.Count > 3)
+        _history.Add((t, CollectStates(x)));
+        if (_history.Count > 4)
         {
             _history.RemoveAt(0);
         }
     }
 
-    /// <summary>估計 LTE 與容許值的比值；歷史不足時回傳 0（接受）。</summary>
+    private double Tolerance(int i, double magnitude) =>
+        options.TrTol * (options.RelTol * magnitude + (_isVoltage[i] ? options.VnTol : options.AbsTol));
+
+    private double LocalScale(int i, double current)
+    {
+        var m = Math.Abs(current);
+        foreach (var (_, s) in _history)
+        {
+            m = Math.Max(m, Math.Abs(s[i]));
+        }
+
+        return m;
+    }
+
+    /// <summary>估計 LTE 與容許值的比值；歷史不足時回傳 −1（接受但不放大步長）。</summary>
     private double ErrorRatio(double tNew, double[] xNew, IntegrationMethod method)
     {
-        var needed = Order(method) + 1; // BE 需要 2 個歷史點、TR 需要 3 個
+        var needed = method == IntegrationMethod.BackwardEuler ? 2 : 3;
         if (_history.Count < needed)
         {
-            return 0;
+            return -1;
         }
 
         var states = CollectStates(xNew);
@@ -251,29 +284,50 @@ internal sealed class TransientEngine(
         for (var i = 0; i < states.Length; i++)
         {
             double lte;
-            if (method == IntegrationMethod.Trapezoidal)
+            if (method == IntegrationMethod.BackwardEuler)
+            {
+                var (t1, s1) = _history[^2];
+                var (t2, s2) = _history[^1];
+                lte = h * h * DividedDifference2(t1, s1[i], t2, s2[i], tNew, states[i]);
+            }
+            else
             {
                 var (t0, s0) = _history[^3];
                 var (t1, s1) = _history[^2];
                 var (t2, s2) = _history[^1];
                 var dd3 = DividedDifference3(t0, s0[i], t1, s1[i], t2, s2[i], tNew, states[i]);
-                lte = h * h * h * dd3 / 2;
-            }
-            else
-            {
-                var (t1, s1) = _history[^2];
-                var (t2, s2) = _history[^1];
-                var dd2 = DividedDifference2(t1, s1[i], t2, s2[i], tNew, states[i]);
-                lte = h * h * dd2;
+
+                // x''' ≈ 6·DD3；TR 的 LTE = h³x'''/12，BDF2 的 LTE ≈ 2h³x'''/9
+                lte = method == IntegrationMethod.Trapezoidal ? h * h * h * dd3 / 2 : 4.0 / 3 * h * h * h * dd3;
             }
 
-            var abs = _isVoltage[i] ? options.VnTol : options.AbsTol;
-            var scale = Math.Max(_stateScale[i], Math.Abs(states[i]));
-            var tol = options.TrTol * (options.RelTol * scale + abs);
-            worst = Math.Max(worst, Math.Abs(lte) / tol);
+            worst = Math.Max(worst, Math.Abs(lte) / Tolerance(i, LocalScale(i, states[i])));
         }
 
         return worst;
+    }
+
+    /// <summary>最近四個點的某個狀態量出現連續兩次正負交替（且幅度超過容許值）。</summary>
+    private bool IsRinging()
+    {
+        if (_history.Count < 4)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _history[^1].States.Length; i++)
+        {
+            var d1 = _history[^3].States[i] - _history[^4].States[i];
+            var d2 = _history[^2].States[i] - _history[^3].States[i];
+            var d3 = _history[^1].States[i] - _history[^2].States[i];
+            var tol = Tolerance(i, LocalScale(i, _history[^1].States[i])) / options.TrTol;
+            if (d1 * d2 < 0 && d2 * d3 < 0 && Math.Abs(d2) > tol && Math.Abs(d3) > tol)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static double DividedDifference2(double t0, double y0, double t1, double y1, double t2, double y2)
@@ -290,7 +344,7 @@ internal sealed class TransientEngine(
         return (b - a) / (t3 - t0);
     }
 
-    /// <summary>逐步記錄選定的訊號；完成後才組成不可變結果。</summary>
+    /// <summary>逐步記錄選定的訊號；分析完成後才組成不可變結果。</summary>
     private sealed class Recorder
     {
         private readonly MnaSystem _system;
@@ -325,7 +379,7 @@ internal sealed class TransientEngine(
             }
         }
 
-        public void Record(double t, double[] x)
+        public void Record(double[] x)
         {
             for (var c = 0; c < _channels.Count; c++)
             {
