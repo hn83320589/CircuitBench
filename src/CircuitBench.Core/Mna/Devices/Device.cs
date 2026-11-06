@@ -51,6 +51,25 @@ public abstract class Device(string name)
 
 public readonly record struct StateQuantity(double Value, bool IsVoltage);
 
+/// <summary>
+/// 記錄每個矩陣元素「抵消前」的量級：組裝時所有蓋印值絕對值的最大者。
+/// 奇異判定以它為尺度，才能偵測同一元素內的抵消（例如受控源的負電導剛好抵消電阻）。
+/// </summary>
+internal static class StampScale
+{
+    public static void Track(double[] scale, int slot, double magnitude)
+    {
+        if (slot >= 0 && magnitude > scale[slot])
+        {
+            scale[slot] = magnitude;
+        }
+    }
+
+    public static double Magnitude<T>(T v)
+        where T : INumberBase<T> =>
+        typeof(T) == typeof(double) ? Math.Abs((double)(object)v) : ((Complex)(object)v).Magnitude;
+}
+
 /// <summary>兩端點之間的導納蓋印（含接地處理）。</summary>
 internal struct TwoTerminalSlots
 {
@@ -87,13 +106,21 @@ internal struct TwoTerminalSlots
         _qp = P >= 0 && Q >= 0 ? s.IndexOf(Q, P) : -1;
     }
 
-    public readonly void Stamp<T>(T[] m, T g)
+    public readonly void Stamp<T>(T[] m, T g, double[]? scale = null)
         where T : INumberBase<T>
     {
         if (_pp >= 0) m[_pp] += g;
         if (_qq >= 0) m[_qq] += g;
         if (_pq >= 0) m[_pq] -= g;
         if (_qp >= 0) m[_qp] -= g;
+        if (scale is not null)
+        {
+            var mag = StampScale.Magnitude(g);
+            StampScale.Track(scale, _pp, mag);
+            StampScale.Track(scale, _qq, mag);
+            StampScale.Track(scale, _pq, mag);
+            StampScale.Track(scale, _qp, mag);
+        }
     }
 
     /// <summary>由 P 經元件流向 Q 的等效電流源 i（KCL：P 流出、Q 流入）。</summary>
@@ -156,7 +183,7 @@ internal struct BranchSlots
         _kk = withDiagonal ? s.IndexOf(K, K) : -1;
     }
 
-    public readonly void StampIncidence<T>(T[] m)
+    public readonly void StampIncidence<T>(T[] m, double[]? scale = null)
         where T : INumberBase<T>
     {
         if (_pk >= 0)
@@ -170,12 +197,24 @@ internal struct BranchSlots
             m[_qk] -= T.One;
             m[_kq] -= T.One;
         }
+
+        if (scale is not null)
+        {
+            StampScale.Track(scale, _pk, 1);
+            StampScale.Track(scale, _kp, 1);
+            StampScale.Track(scale, _qk, 1);
+            StampScale.Track(scale, _kq, 1);
+        }
     }
 
-    public readonly void StampDiagonal<T>(T[] m, T value)
+    public readonly void StampDiagonal<T>(T[] m, T value, double[]? scale = null)
         where T : INumberBase<T>
     {
         m[_kk] += value;
+        if (scale is not null)
+        {
+            StampScale.Track(scale, _kk, StampScale.Magnitude(value));
+        }
     }
 
     public readonly double Voltage(double[] x) => (P >= 0 ? x[P] : 0) - (Q >= 0 ? x[Q] : 0);

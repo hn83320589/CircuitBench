@@ -99,8 +99,22 @@ public sealed class SparseLu<T>
         }
     }
 
+    /// <summary>
+    /// 主元判定的相對門檻：主元 ≤ 門檻 × 尺度 即視為奇異。
+    /// 尺度取「該欄原始元素的蓋印量級」與「消去過程中出現的最大值」兩者較大者，
+    /// 因此同一元素內的抵消（例如負電阻剛好抵消電導）與累積捨入都能被偵測。
+    /// </summary>
+    public const double SingularPivotTolerance = 1e-13;
+
+    /// <summary>縮放後條件數下界超過此值即視為接近奇異（解約只剩 3 位有效數字以下）。</summary>
+    public const double NearSingularConditionBound = 1e12;
+
     /// <summary>完整分解：排序（只做一次）、符號分析與數值分解，並重新選擇主元。</summary>
-    public void Factor(SparseMatrix<T> a)
+    /// <param name="a">矩陣數值。</param>
+    /// <param name="elementScale">
+    /// 選用：每個非零元素「抵消前」的量級（組裝時所有蓋印值絕對值的最大者），與 Values 同索引。
+    /// </param>
+    public void Factor(SparseMatrix<T> a, double[]? elementScale = null)
     {
         EnsureSamePattern(a);
         var start = _time.GetTimestamp();
@@ -129,6 +143,11 @@ public sealed class SparseLu<T>
             {
                 var row = _pattern.RowIndices[p];
                 colScale = Math.Max(colScale, Magnitude(a.Values[p]));
+                if (elementScale is not null)
+                {
+                    colScale = Math.Max(colScale, elementScale[p]);
+                }
+
                 _work[row] += a.Values[p];
                 Touch(row, touched);
                 if (_pinv[row] >= 0 && !visited[_pinv[row]])
@@ -151,7 +170,9 @@ public sealed class SparseLu<T>
                 for (var e = 0; e < rows.Count; e++)
                 {
                     var r = rows[e];
-                    _work[r] -= vals[e] * xj;
+                    var update = vals[e] * xj;
+                    colScale = Math.Max(colScale, Magnitude(update));
+                    _work[r] -= update;
                     Touch(r, touched);
                 }
             }
@@ -178,7 +199,7 @@ public sealed class SparseLu<T>
             }
 
             touched.Clear();
-            if (best < 0 || bestMag == 0 || bestMag <= 1e-14 * colScale)
+            if (best < 0 || bestMag == 0 || bestMag <= SingularPivotTolerance * colScale)
             {
                 Array.Clear(_work);
                 Array.Clear(_mark);
@@ -223,12 +244,12 @@ public sealed class SparseLu<T>
     /// 結構不變時只重做數值分解（沿用主元順序與 L/U 結構）。
     /// 若某個主元相對於該欄的候選值太小，會自動退回 <see cref="Factor"/>。
     /// </summary>
-    public void Refactor(SparseMatrix<T> a)
+    public void Refactor(SparseMatrix<T> a, double[]? elementScale = null)
     {
         EnsureSamePattern(a);
         if (!_factored)
         {
-            Factor(a);
+            Factor(a, elementScale);
             return;
         }
 
@@ -236,9 +257,15 @@ public sealed class SparseLu<T>
         for (var k = 0; k < _n; k++)
         {
             var col = _colOrder![k];
+            var colScale = 0.0;
             for (var p = _pattern.ColumnPointers[col]; p < _pattern.ColumnPointers[col + 1]; p++)
             {
                 _work[_pattern.RowIndices[p]] += a.Values[p];
+                colScale = Math.Max(colScale, Magnitude(a.Values[p]));
+                if (elementScale is not null)
+                {
+                    colScale = Math.Max(colScale, elementScale[p]);
+                }
             }
 
             var uSteps = _uSteps[k];
@@ -254,7 +281,9 @@ public sealed class SparseLu<T>
                 var vals = _lVals[j];
                 for (var e = 0; e < rows.Count; e++)
                 {
-                    _work[rows[e]] -= vals[e] * xj;
+                    var update = vals[e] * xj;
+                    colScale = Math.Max(colScale, Magnitude(update));
+                    _work[rows[e]] -= update;
                 }
             }
 
@@ -269,7 +298,9 @@ public sealed class SparseLu<T>
                 maxOther = Math.Max(maxOther, Magnitude(_work[lRows[e]]));
             }
 
-            if (pivotMag == 0 || pivotMag < _pivotThreshold * maxOther)
+            // 主元不再適合（相對其他候選太小），或相對尺度已接近奇異：退回完整分解重新選主元；
+            // 若真的奇異，Factor 會丟出 SingularMatrixException。
+            if (pivotMag == 0 || pivotMag < _pivotThreshold * maxOther || pivotMag <= SingularPivotTolerance * colScale)
             {
                 for (var e = 0; e < lRows.Count; e++)
                 {
@@ -278,7 +309,7 @@ public sealed class SparseLu<T>
 
                 _totalTime += _time.GetElapsedTime(start);
                 _fallback++;
-                Factor(a);
+                Factor(a, elementScale);
                 return;
             }
 
@@ -293,6 +324,53 @@ public sealed class SparseLu<T>
 
         _refactor++;
         _totalTime += _time.GetElapsedTime(start);
+    }
+
+    /// <summary>
+    /// 列縮放後的條件數下界：以每列「抵消前」的最大元素量級 rᵢ 縮放後，
+    /// κ(D·A) ≥ ‖x‖∞ / maxᵢ(|bᵢ| / rᵢ)。解比「每列單獨看」大上許多個數量級，代表矩陣接近奇異。
+    /// 列縮放讓「電流灌進只經 Roff 接地的節點」這類量級懸殊但正確的解不會被誤判。
+    /// </summary>
+    public static double ScaledConditionLowerBound(SparseMatrix<T> a, double[]? elementScale, ReadOnlySpan<T> x, ReadOnlySpan<T> b)
+    {
+        var n = a.Pattern.Size;
+        var rowScale = new double[n];
+        for (var c = 0; c < n; c++)
+        {
+            for (var p = a.Pattern.ColumnPointers[c]; p < a.Pattern.ColumnPointers[c + 1]; p++)
+            {
+                var r = a.Pattern.RowIndices[p];
+                var m = Magnitude(a.Values[p]);
+                if (elementScale is not null)
+                {
+                    m = Math.Max(m, elementScale[p]);
+                }
+
+                rowScale[r] = Math.Max(rowScale[r], m);
+            }
+        }
+
+        var scaledB = 0.0;
+        for (var i = 0; i < n; i++)
+        {
+            if (rowScale[i] > 0)
+            {
+                scaledB = Math.Max(scaledB, Magnitude(b[i]) / rowScale[i]);
+            }
+        }
+
+        var xNorm = 0.0;
+        foreach (var v in x)
+        {
+            xNorm = Math.Max(xNorm, Magnitude(v));
+        }
+
+        if (xNorm == 0)
+        {
+            return 0;
+        }
+
+        return scaledB == 0 ? double.PositiveInfinity : xNorm / scaledB;
     }
 
     /// <summary>解 A·x = b，結果寫回 <paramref name="rhs"/>。</summary>

@@ -22,7 +22,7 @@ internal sealed class ResistorDevice(string name, int p, int q, double resistanc
 
     public override void Bind(SparsityPattern pattern) => _slots.Bind(pattern);
 
-    public override void Load(RealLoadContext ctx) => _slots.Stamp(ctx.Matrix, _g);
+    public override void Load(RealLoadContext ctx) => _slots.Stamp(ctx.Matrix, _g, ctx.Scale);
 
     public override void LoadAc(ComplexLoadContext ctx) => _slots.Stamp(ctx.Matrix, new Complex(_g, 0));
 
@@ -40,7 +40,7 @@ internal sealed class SwitchDevice(TimedSwitch model, int p, int q) : Device(mod
     public override void Bind(SparsityPattern pattern) => _slots.Bind(pattern);
 
     public override void Load(RealLoadContext ctx) =>
-        _slots.Stamp(ctx.Matrix, Conductance(ctx.Mode == LoadMode.Dc ? 0 : ctx.Time));
+        _slots.Stamp(ctx.Matrix, Conductance(ctx.Mode == LoadMode.Dc ? 0 : ctx.Time), ctx.Scale);
 
     public override void LoadAc(ComplexLoadContext ctx) => _slots.Stamp(ctx.Matrix, new Complex(Conductance(0), 0));
 
@@ -77,7 +77,7 @@ internal sealed class CapacitorDevice(string name, int p, int q, double capacita
         }
 
         var (g, ieq) = Companion(ctx);
-        _slots.Stamp(ctx.Matrix, g);
+        _slots.Stamp(ctx.Matrix, g, ctx.Scale);
         _slots.StampCurrent(ctx.Rhs, ieq);
     }
 
@@ -119,7 +119,7 @@ internal sealed class InductorDevice(string name, int p, int q, int k, double in
 
     public override void Load(RealLoadContext ctx)
     {
-        _slots.StampIncidence(ctx.Matrix);
+        _slots.StampIncidence(ctx.Matrix, ctx.Scale);
         if (ctx.Mode != LoadMode.Transient)
         {
             return;
@@ -127,7 +127,7 @@ internal sealed class InductorDevice(string name, int p, int q, int k, double in
 
         // 支路方程：v(P) − v(Q) − L·A0·i = L·(A1·i(n) + A2·i(n−1)) + B·v(n)
         var c = ctx.Coefficients;
-        _slots.StampDiagonal(ctx.Matrix, -inductance * c.A0);
+        _slots.StampDiagonal(ctx.Matrix, -inductance * c.A0, ctx.Scale);
         ctx.Rhs[k] += inductance * (c.A1 * _iPrev + c.A2 * _iPrev2) + c.B * _vPrev;
     }
 
@@ -169,7 +169,7 @@ internal sealed class VoltageSourceDevice(VoltageSource model, int p, int q, int
 
     public override void Load(RealLoadContext ctx)
     {
-        _slots.StampIncidence(ctx.Matrix);
+        _slots.StampIncidence(ctx.Matrix, ctx.Scale);
         ctx.Rhs[k] += SourceValues.Evaluate(model.Spec, DcOverride, ctx) * ctx.SourceScale;
     }
 
@@ -238,18 +238,23 @@ internal sealed class VcvsDevice(string name, int p, int q, int cp, int cn, int 
         _kcn = cn >= 0 ? pattern.IndexOf(k, cn) : -1;
     }
 
-    private void StampControl<T>(T[] m)
+    private void StampControl<T>(T[] m, double[]? scale = null)
         where T : INumberBase<T>
     {
         var g = T.CreateChecked(gain);
         if (_kcp >= 0) m[_kcp] -= g;
         if (_kcn >= 0) m[_kcn] += g;
+        if (scale is not null)
+        {
+            StampScale.Track(scale, _kcp, Math.Abs(gain));
+            StampScale.Track(scale, _kcn, Math.Abs(gain));
+        }
     }
 
     public override void Load(RealLoadContext ctx)
     {
-        _slots.StampIncidence(ctx.Matrix);
-        StampControl(ctx.Matrix);
+        _slots.StampIncidence(ctx.Matrix, ctx.Scale);
+        StampControl(ctx.Matrix, ctx.Scale);
     }
 
     public override void LoadAc(ComplexLoadContext ctx)
@@ -284,7 +289,7 @@ internal sealed class VccsDevice(string name, int p, int q, int cp, int cn, doub
         _qcn = q >= 0 && cn >= 0 ? pattern.IndexOf(q, cn) : -1;
     }
 
-    private void Stamp<T>(T[] m)
+    private void Stamp<T>(T[] m, double[]? scale = null)
         where T : INumberBase<T>
     {
         var g = T.CreateChecked(gm);
@@ -292,9 +297,16 @@ internal sealed class VccsDevice(string name, int p, int q, int cp, int cn, doub
         if (_pcn >= 0) m[_pcn] -= g;
         if (_qcp >= 0) m[_qcp] -= g;
         if (_qcn >= 0) m[_qcn] += g;
+        if (scale is not null)
+        {
+            foreach (var slot in (ReadOnlySpan<int>)[_pcp, _pcn, _qcp, _qcn])
+            {
+                StampScale.Track(scale, slot, Math.Abs(gm));
+            }
+        }
     }
 
-    public override void Load(RealLoadContext ctx) => Stamp(ctx.Matrix);
+    public override void Load(RealLoadContext ctx) => Stamp(ctx.Matrix, ctx.Scale);
 
     public override void LoadAc(ComplexLoadContext ctx) => Stamp(ctx.Matrix);
 

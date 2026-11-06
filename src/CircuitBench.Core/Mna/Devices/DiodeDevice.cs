@@ -42,7 +42,7 @@ internal sealed class DiodeDevice(Diode model, int p, int q) : Device(model.Name
         _vdLast = vd;
 
         var (id, gd) = Evaluate(vd);
-        _slots.Stamp(ctx.Matrix, gd + ctx.Gmin);
+        _slots.Stamp(ctx.Matrix, gd + ctx.Gmin, ctx.Scale);
         var ieq = id - gd * vd;
         _slots.StampCurrent(ctx.Rhs, ieq);
     }

@@ -37,9 +37,12 @@ public enum LoadMode
 }
 
 /// <summary>實數 MNA 組裝時傳給各元件的資訊。</summary>
-public sealed class RealLoadContext(double[] matrixValues, double[] rhs)
+public sealed class RealLoadContext(double[] matrixValues, double[] rhs, double[]? scale = null)
 {
     public double[] Matrix { get; } = matrixValues;
+
+    /// <summary>每個元素抵消前的最大蓋印量級（與 Matrix 同索引），供奇異判定使用。</summary>
+    public double[] Scale { get; } = scale ?? new double[matrixValues.Length];
 
     public double[] Rhs { get; } = rhs;
 

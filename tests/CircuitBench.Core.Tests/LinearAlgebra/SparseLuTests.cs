@@ -158,6 +158,81 @@ public class SparseLuTests
         Assert.Throws<SingularMatrixException>(() => lu.Factor(m));
     }
 
+    /// <summary>
+    /// 審查者回報：44 個秩虧 1 的隨機矩陣有 22 個被當成正常矩陣。
+    /// 現在必須由分解（主元判定）或解後的條件數下界檢查偵測出來。
+    /// </summary>
+    [Fact]
+    public void Property_RankDeficientMatricesAreDetected()
+    {
+        PropertyTest.ForAll(300, (rng, _) =>
+        {
+            var n = rng.Next(3, 60);
+            var a = RandomMatrices.SparseReal(rng, n, 0.05 + rng.NextDouble() * 0.2, permuteRows: rng.Next(2) == 0);
+
+            // 把某一欄換成另外兩欄的線性組合 → 秩恰好少 1（數值上奇異，結構上不奇異）
+            int i = rng.Next(n), j, k;
+            do { j = rng.Next(n); } while (j == i);
+            do { k = rng.Next(n); } while (k == i || k == j);
+            double cj = rng.NextDouble() * 2 - 1, ck = rng.NextDouble() * 2 - 1;
+            for (var r = 0; r < n; r++)
+            {
+                a[r, i] = cj * a[r, j] + ck * a[r, k];
+            }
+
+            var m = SparseMatrix<double>.FromDense(a, v => v != 0);
+            var lu = new SparseLu<double>(m.Pattern);
+            var b = Enumerable.Range(0, n).Select(_ => rng.NextDouble() * 2 - 1).ToArray();
+            try
+            {
+                lu.Factor(m);
+            }
+            catch (SingularMatrixException)
+            {
+                return; // 分解時就偵測到
+            }
+
+            var x = (double[])b.Clone();
+            lu.Solve(x);
+            var bound = SparseLu<double>.ScaledConditionLowerBound(m, null, x, b);
+            Assert.True(bound >= SparseLu<double>.NearSingularConditionBound,
+                $"n={n} 秩虧矩陣未被偵測：條件數下界 {bound:E2}");
+        });
+    }
+
+    [Fact]
+    public void Property_WellConditionedMatricesAreNotFlagged()
+    {
+        PropertyTest.ForAll(200, (rng, _) =>
+        {
+            var n = rng.Next(1, 80);
+            var a = RandomMatrices.SparseReal(rng, n, rng.NextDouble() * 0.2, permuteRows: rng.Next(2) == 0);
+            var m = SparseMatrix<double>.FromDense(a, v => v != 0);
+            var lu = new SparseLu<double>(m.Pattern);
+            lu.Factor(m);
+            var b = Enumerable.Range(0, n).Select(_ => rng.NextDouble() * 2 - 1).ToArray();
+            var x = (double[])b.Clone();
+            lu.Solve(x);
+            Assert.True(SparseLu<double>.ScaledConditionLowerBound(m, null, x, b) < SparseLu<double>.NearSingularConditionBound);
+        });
+    }
+
+    [Fact]
+    public void CancellationInsideOneElementIsDetectedWithElementScale()
+    {
+        // 同一元素內 1/3000 − 0.000333… 抵消到 ~1e-19：只看殘值的話判定永遠不會成立
+        var g = 1.0 / 3000;
+        var value = g + -0.000333333333333333;
+        var builder = new PatternBuilder(1);
+        builder.Add(0, 0);
+        var m = new SparseMatrix<double>(builder.Build());
+        m.Values[0] = value;
+        var scale = new[] { g };
+        var lu = new SparseLu<double>(m.Pattern);
+        var ex = Assert.Throws<SingularMatrixException>(() => lu.Factor(m, scale));
+        Assert.Equal(0, ex.Column);
+    }
+
     [Fact]
     public void ComplexSingularMatrixIsDetected()
     {

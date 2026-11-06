@@ -100,6 +100,78 @@ public class OperatingPointTests
     }
 
     [Fact]
+    public void NegativeResistanceCancellingInsideOneElementIsReported()
+    {
+        // 審查者回報：G1 以負轉導剛好抵消 R1 的 1/3k 電導，抵消發生在同一個矩陣元素內，
+        // 舊版直接回傳 V(n1) ≈ 3e15 V 而沒有任何錯誤。
+        var deck = CircuitBench.Core.IO.SpiceNetlistReader.Parse("""
+            I1 0 n1 DC 1m
+            R1 n1 0 3k
+            G1 n1 0 n1 0 -0.000333333333333333
+            .op
+            """).Deck!;
+        var ex = Assert.Throws<SimulationException>(() => _sim.OperatingPoint(deck.Circuit, SimulationOptions.Default));
+        Assert.Contains("奇異", ex.Message);
+        Assert.Contains("節點 n1", ex.Message);
+        Assert.Contains("G1", ex.Message);
+        Assert.Contains("負電阻", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(-0.00033333333333333)]   // 抵消後殘值在捨入誤差邊緣
+    [InlineData(-0.000333333333333334)]  // 稍微超過：淨電導變成極小的負值
+    public void NearlyCancellingNegativeResistanceVariantsAreReported(double gm)
+    {
+        var c = Circuit.Create([
+            CurrentSource.Dc("I1", "0", "n1", 1e-3),
+            new Resistor("R1", "n1", "0", 3e3),
+            new Vccs("G1", "n1", "0", "n1", "0", gm),
+        ]);
+        var ex = Assert.Throws<SimulationException>(() => _sim.OperatingPoint(c, SimulationOptions.Default));
+        Assert.Contains("奇異", ex.Message);
+    }
+
+    [Fact]
+    public void VcvsLoopGainOfExactlyOneIsReported()
+    {
+        // E1 增益 3、回授取 1/3 分壓：迴路增益剛好 1，out 無法決定
+        var c = Circuit.Create([
+            VoltageSource.Dc("V1", "in", "0", 1),
+            new Resistor("Rin", "in", "0", 1e3),
+            new Vcvs("E1", "out", "0", "fb", "0", 3),
+            new Resistor("R1", "out", "fb", 2e3),
+            new Resistor("R2", "fb", "0", 1e3),
+        ]);
+        var ex = Assert.Throws<SimulationException>(() => _sim.OperatingPoint(c, SimulationOptions.Default));
+        Assert.Contains("奇異", ex.Message);
+    }
+
+    [Fact]
+    public void LegitimateNegativeResistanceIsStillSolved()
+    {
+        // 負電導只抵消一半：淨電導 1/6k，V = 1 mA × 6 kΩ = 6 V，必須正常求解
+        var c = Circuit.Create([
+            CurrentSource.Dc("I1", "0", "n1", 1e-3),
+            new Resistor("R1", "n1", "0", 3e3),
+            new Vccs("G1", "n1", "0", "n1", "0", -1.0 / 6e3),
+        ]);
+        Assert.Equal(6, _sim.OperatingPoint(c, SimulationOptions.Default)[SignalId.V("n1")], 9);
+    }
+
+    [Fact]
+    public void HugeButCorrectVoltageThroughOffSwitchIsNotFlagged()
+    {
+        // 1 µA 灌進只經 Roff = 1 TΩ 接地的節點：1e6 V 雖然荒謬但是理想模型下的正確解，不可誤判為奇異
+        var c = Circuit.Create([
+            CurrentSource.Dc("I1", "0", "n", 1e-6),
+            new TimedSwitch("S1", "n", "0", [], InitiallyOn: false),
+            VoltageSource.Dc("V1", "a", "0", 1),
+            new Resistor("R1", "a", "0", 1e-3),
+        ]);
+        Assert.Equal(1e6, _sim.OperatingPoint(c, SimulationOptions.Default)[SignalId.V("n")], 1e-3);
+    }
+
+    [Fact]
     public void StatisticsReportMatrixSize()
     {
         var c = Circuit.Create([VoltageSource.Dc("V1", "a", "0", 1), new Resistor("R1", "a", "0", 1)]);
