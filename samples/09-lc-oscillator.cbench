@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "title": "LC 振盪",
+  "nextId": 10,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "currentSource",
+      "name": "I1",
+      "x": 0,
+      "y": 4,
+      "rotation": 180,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "",
+        "waveform": "PWL(0 1m 1n 0)"
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "inductor",
+      "name": "L1",
+      "x": 4,
+      "y": 4,
+      "rotation": 90,
+      "mirrored": false,
+      "parameters": {
+        "value": "1m"
+      }
+    },
+    {
+      "type": "component",
+      "id": 3,
+      "kind": "capacitor",
+      "name": "C1",
+      "x": 8,
+      "y": 4,
+      "rotation": 90,
+      "mirrored": false,
+      "parameters": {
+        "value": "1u"
+      }
+    },
+    {
+      "type": "wire",
+      "id": 4,
+      "x": 0,
+      "y": 2,
+      "x2": 4,
+      "y2": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "wire",
+      "id": 5,
+      "x": 4,
+      "y": 2,
+      "x2": 8,
+      "y2": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "wire",
+      "id": 6,
+      "x": 0,
+      "y": 6,
+      "x2": 4,
+      "y2": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "wire",
+      "id": 7,
+      "x": 4,
+      "y": 6,
+      "x2": 8,
+      "y2": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 8,
+      "x": 4,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 9,
+      "name": "a",
+      "x": 8,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "transient",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "2m",
+    "tranMaxStep": "2u",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

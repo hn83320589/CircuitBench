@@ -1,0 +1,7 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title RC 低通濾波器
+V1 in 0 DC 0 AC 1 0
+R1 in out 1000
+C1 out 0 1E-07
+.ac dec 100 10 1000000
+.end

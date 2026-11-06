@@ -1,0 +1,8 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title 受控源組成的反相放大器
+Vin in 0 DC 0.5 SIN(0 0.5 1000 0 0 0)
+R1 in m 1000
+R2 m out 10000
+E1 out 0 m 0 -100000
+.op
+.end

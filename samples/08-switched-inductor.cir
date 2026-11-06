@@ -1,0 +1,10 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title 開關切換的電感電路
+.model D_D1 D(Is=1E-14 N=1)
+V1 N$1 0 DC 10
+S1 N$1 sw times=(0.001 0.006) initial=off ron=0.001 roff=1000000000000
+R1 sw x 10
+L1 x 0 0.01
+D1 0 sw D_D1
+.tran 1E-05 0.01 0 2E-05
+.end

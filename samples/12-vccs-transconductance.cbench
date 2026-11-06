@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "title": "電壓控制電流源（轉導放大）",
+  "nextId": 12,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "voltageSource",
+      "name": "Vin",
+      "x": 0,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "0.5",
+        "waveform": ""
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "vccs",
+      "name": "G1",
+      "x": 6,
+      "y": 5,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "gain": "10m"
+      }
+    },
+    {
+      "type": "wire",
+      "id": 3,
+      "x": 0,
+      "y": 2,
+      "x2": 4,
+      "y2": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "wire",
+      "id": 4,
+      "x": 4,
+      "y": 2,
+      "x2": 4,
+      "y2": 4,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 5,
+      "x": 4,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "component",
+      "id": 6,
+      "kind": "resistor",
+      "name": "RL",
+      "x": 10,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "value": "1k"
+      }
+    },
+    {
+      "type": "ground",
+      "id": 7,
+      "x": 12,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 8,
+      "x": 8,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 9,
+      "x": 0,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 10,
+      "name": "in",
+      "x": 0,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 11,
+      "name": "out",
+      "x": 8,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "operatingPoint",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "10m",
+    "tranMaxStep": "",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "title": "二極體半波整流",
+  "nextId": 10,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "voltageSource",
+      "name": "V1",
+      "x": 0,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "",
+        "waveform": "SIN(0 10 50)"
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "diode",
+      "name": "D1",
+      "x": 4,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "is": "1e-14",
+        "n": "1"
+      }
+    },
+    {
+      "type": "wire",
+      "id": 3,
+      "x": 0,
+      "y": 2,
+      "x2": 2,
+      "y2": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "component",
+      "id": 4,
+      "kind": "resistor",
+      "name": "RL",
+      "x": 8,
+      "y": 4,
+      "rotation": 90,
+      "mirrored": false,
+      "parameters": {
+        "value": "1k"
+      }
+    },
+    {
+      "type": "wire",
+      "id": 5,
+      "x": 6,
+      "y": 2,
+      "x2": 8,
+      "y2": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 6,
+      "name": "in",
+      "x": 0,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 7,
+      "name": "out",
+      "x": 8,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 8,
+      "x": 0,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 9,
+      "x": 8,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "transient",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "40m",
+    "tranMaxStep": "20u",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

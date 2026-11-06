@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "title": "開關切換的電感電路",
+  "nextId": 11,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "voltageSource",
+      "name": "V1",
+      "x": 0,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "10",
+        "waveform": ""
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "switch",
+      "name": "S1",
+      "x": 2,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "initial": "off",
+        "roff": "1e12",
+        "ron": "1m",
+        "times": "1m 6m"
+      }
+    },
+    {
+      "type": "component",
+      "id": 3,
+      "kind": "resistor",
+      "name": "R1",
+      "x": 6,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "value": "10"
+      }
+    },
+    {
+      "type": "component",
+      "id": 4,
+      "kind": "inductor",
+      "name": "L1",
+      "x": 8,
+      "y": 4,
+      "rotation": 90,
+      "mirrored": false,
+      "parameters": {
+        "value": "10m"
+      }
+    },
+    {
+      "type": "component",
+      "id": 5,
+      "kind": "diode",
+      "name": "D1",
+      "x": 4,
+      "y": 4,
+      "rotation": 270,
+      "mirrored": false,
+      "parameters": {
+        "is": "1e-14",
+        "n": "1"
+      }
+    },
+    {
+      "type": "ground",
+      "id": 6,
+      "x": 0,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 7,
+      "x": 4,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 8,
+      "x": 8,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 9,
+      "name": "sw",
+      "x": 4,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 10,
+      "name": "x",
+      "x": 8,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "transient",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "10m",
+    "tranMaxStep": "20u",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

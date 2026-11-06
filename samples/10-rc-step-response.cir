@@ -1,0 +1,7 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title RC 步階響應
+V1 in 0 PULSE(0 5 0.0001 1E-06 1E-06 0.01)
+R1 in out 1000
+C1 out 0 1E-06
+.tran 6E-06 0.006
+.end

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "title": "分壓器",
+  "nextId": 8,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "voltageSource",
+      "name": "V1",
+      "x": 0,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "10",
+        "waveform": ""
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "resistor",
+      "name": "R1",
+      "x": 2,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "value": "1k"
+      }
+    },
+    {
+      "type": "component",
+      "id": 3,
+      "kind": "resistor",
+      "name": "R2",
+      "x": 4,
+      "y": 4,
+      "rotation": 90,
+      "mirrored": false,
+      "parameters": {
+        "value": "1k"
+      }
+    },
+    {
+      "type": "label",
+      "id": 4,
+      "name": "in",
+      "x": 0,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 5,
+      "name": "out",
+      "x": 4,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 6,
+      "x": 0,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 7,
+      "x": 4,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "operatingPoint",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "10m",
+    "tranMaxStep": "",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

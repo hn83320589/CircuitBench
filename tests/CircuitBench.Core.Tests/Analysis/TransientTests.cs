@@ -128,6 +128,23 @@ public class TransientTests
         Assert.Equal(10 / 10.001, il[Array.IndexOf(t, 1e-3) - 1], 6);
     }
 
+    [Fact]
+    public void StiffnessAppearingWithoutBreakpointDoesNotRing()
+    {
+        // 開關打開後電感經飛輪二極體放電；電流降到 0 時二極體截止，sw 變成極高阻抗節點（剛性模態），
+        // 這個時刻不是轉折點，TR 若不處理會在 sw 上逐步正負交替
+        var deck = CircuitBench.Core.IO.SpiceNetlistReader.Parse("""
+            V1 in 0 10
+            S1 in sw times=(1m 6m) initial=off
+            R1 sw x 10
+            L1 x 0 10m
+            D1 0 sw
+            """).Deck!;
+        var res = _sim.Transient(deck.Circuit, new TransientRequest(10e-3, 20e-6), SimulationOptions.Default);
+        Assert.Equal(0, WaveformMath.StepwiseAlternations(res.Data[SignalId.V("sw")], 1e-3));
+        Assert.Equal(0, WaveformMath.StepwiseAlternations(res.Data[SignalId.I("L1")], 1e-6));
+    }
+
     // ---------- 驗收標準 10：轉折點 ----------
 
     [Fact]

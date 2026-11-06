@@ -161,12 +161,33 @@ internal sealed class TransientEngine(
                 continue;
             }
 
+            // TR 振盪檢查：某個未知數在這一步反向時，以 BDF2 重算同一步；
+            // 兩者明顯不一致代表是剛性模態造成的 TR 正負交替，改用 BDF2 的結果。
+            var ringingDetected = false;
+            if (method == IntegrationMethod.Trapezoidal && _previousX is { } xPrev && ReversedUnknowns(xPrev, x, xNew) is { Count: > 0 } reversed)
+            {
+                ctx.Method = IntegrationMethod.Bdf2;
+                ctx.Coefficients = IntegrationCoefficients.Bdf2(hActual, t - _times[^2]);
+                var xBdf = solver.Newton(x, 0, options.MaxNewtonIterations);
+                if (xBdf is not null && Disagree(xNew, xBdf, reversed))
+                {
+                    xNew = xBdf;
+                    ringingDetected = true;
+                }
+                else
+                {
+                    ctx.Method = IntegrationMethod.Trapezoidal;
+                    ctx.Coefficients = IntegrationCoefficients.Trapezoidal(hActual);
+                }
+            }
+
             // ---- 接受 ----
             foreach (var d in system.Devices)
             {
                 d.AcceptTransient(xNew, ctx);
             }
 
+            _previousX = x;
             x = xNew;
             t = tNew;
             accepted++;
@@ -205,7 +226,7 @@ internal sealed class TransientEngine(
                         phase = Phase.Trapezoidal;
                         phaseSteps = 0;
                         break;
-                    case Phase.Trapezoidal when IsRinging():
+                    case Phase.Trapezoidal when ringingDetected || IsRinging():
                         phase = Phase.Bdf2;
                         phaseSteps = 0;
                         break;
@@ -217,6 +238,46 @@ internal sealed class TransientEngine(
 
         progress.Complete();
         return (recorder.Build(_times), solver.Iterations, accepted, rejected, opMethod);
+    }
+
+    private double[]? _previousX;
+
+    private double UnknownTolerance(int i, double a, double b) =>
+        options.RelTol * Math.Max(Math.Abs(a), Math.Abs(b)) + (system.Layout.IsVoltageUnknown(i) ? options.VnTol : options.AbsTol);
+
+    /// <summary>連續兩步變化方向相反（且變化量都超過容許值）的未知數。</summary>
+    private List<int> ReversedUnknowns(double[] xPrev, double[] x, double[] xNew)
+    {
+        var list = new List<int>();
+        for (var i = 0; i < x.Length; i++)
+        {
+            var d1 = x[i] - xPrev[i];
+            var d2 = xNew[i] - x[i];
+            var tol = UnknownTolerance(i, x[i], xNew[i]);
+            if (d1 * d2 < 0 && Math.Abs(d1) > tol && Math.Abs(d2) > tol)
+            {
+                list.Add(i);
+            }
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// 在反向的未知數上，TR 與 BDF2 的結果相差超過容許值的 10 倍。
+    /// 正常的極值處兩者只差 LTE 等級；剛性模態造成的 TR 交替則相差一個交替幅度。
+    /// </summary>
+    private bool Disagree(double[] a, double[] b, List<int> unknowns)
+    {
+        foreach (var i in unknowns)
+        {
+            if (Math.Abs(a[i] - b[i]) > 10 * UnknownTolerance(i, a[i], b[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private double[] CollectStates(double[] x)

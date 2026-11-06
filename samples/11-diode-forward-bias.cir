@@ -1,0 +1,8 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title 二極體順向偏壓工作點
+.model D_D1 D(Is=1E-14 N=1)
+V1 N$1 0 DC 5
+R1 N$1 a 1000
+D1 a 0 D_D1
+.op
+.end

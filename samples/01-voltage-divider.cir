@@ -1,0 +1,7 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title 分壓器
+V1 in 0 DC 10
+R1 in out 1000
+R2 out 0 1000
+.op
+.end

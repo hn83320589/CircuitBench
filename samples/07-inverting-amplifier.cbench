@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "title": "受控源組成的反相放大器",
+  "nextId": 13,
+  "elements": [
+    {
+      "type": "component",
+      "id": 1,
+      "kind": "voltageSource",
+      "name": "Vin",
+      "x": 0,
+      "y": 4,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "ac": "",
+        "dc": "0.5",
+        "waveform": "SIN(0 0.5 1k)"
+      }
+    },
+    {
+      "type": "component",
+      "id": 2,
+      "kind": "resistor",
+      "name": "R1",
+      "x": 2,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "value": "1k"
+      }
+    },
+    {
+      "type": "component",
+      "id": 3,
+      "kind": "resistor",
+      "name": "R2",
+      "x": 6,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "value": "10k"
+      }
+    },
+    {
+      "type": "component",
+      "id": 4,
+      "kind": "vcvs",
+      "name": "E1",
+      "x": 6,
+      "y": 7,
+      "rotation": 0,
+      "mirrored": false,
+      "parameters": {
+        "gain": "-100k"
+      }
+    },
+    {
+      "type": "wire",
+      "id": 5,
+      "x": 4,
+      "y": 2,
+      "x2": 4,
+      "y2": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 6,
+      "x": 4,
+      "y": 8,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "wire",
+      "id": 7,
+      "x": 8,
+      "y": 2,
+      "x2": 8,
+      "y2": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 8,
+      "x": 8,
+      "y": 8,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "ground",
+      "id": 9,
+      "x": 0,
+      "y": 6,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 10,
+      "name": "in",
+      "x": 0,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 11,
+      "name": "m",
+      "x": 4,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    },
+    {
+      "type": "label",
+      "id": 12,
+      "name": "out",
+      "x": 8,
+      "y": 2,
+      "rotation": 0,
+      "mirrored": false
+    }
+  ],
+  "analysis": {
+    "kind": "operatingPoint",
+    "dcSource": "V1",
+    "dcStart": "0",
+    "dcStop": "10",
+    "dcStep": "0.1",
+    "tranStop": "10m",
+    "tranMaxStep": "",
+    "acDecade": true,
+    "acStart": "10",
+    "acStop": "1meg",
+    "acPoints": "20",
+    "relTol": 0.001,
+    "vnTol": 1E-06,
+    "absTol": 1E-12,
+    "gmin": 1E-12,
+    "maxNewtonIterations": 100
+  },
+  "view": {
+    "zoom": 20,
+    "panX": 0,
+    "panY": 0,
+    "probes": []
+  }
+}

@@ -1,0 +1,7 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title 電壓控制電流源（轉導放大）
+Vin in 0 DC 0.5
+G1 out 0 in 0 0.01
+RL out 0 1000
+.op
+.end

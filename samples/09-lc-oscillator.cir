@@ -1,0 +1,7 @@
+* CircuitBench 匯出的 SPICE 子集網表
+.title LC 振盪
+I1 0 a PWL(0 0.001 1E-09 0)
+L1 a 0 0.001
+C1 a 0 1E-06
+.tran 2E-06 0.002 0 2E-06
+.end
