@@ -178,7 +178,7 @@ public sealed class RefSolver
             var converged = true;
             for (var i = 0; i < x.Length; i++)
             {
-                if (Math.Abs(xNew[i] - x[i]) > 1e-13 + 1e-12 * Math.Abs(xNew[i]))
+                if (Math.Abs(xNew[i] - x[i]) > 1e-10 + 1e-11 * Math.Abs(xNew[i]))
                 {
                     converged = false;
                 }

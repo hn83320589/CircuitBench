@@ -73,7 +73,7 @@ internal sealed class DcSolver(MnaSystem system, SimulationOptions options, Canc
             if (direct is not null)
             {
                 LastMethod = ConvergenceMethod.Newton;
-                return direct;
+                return Polish(direct);
             }
         }
 
@@ -81,18 +81,29 @@ internal sealed class DcSolver(MnaSystem system, SimulationOptions options, Canc
         if (gmin is not null)
         {
             LastMethod = ConvergenceMethod.GminStepping;
-            return gmin;
+            return Polish(gmin);
         }
 
         var source = SourceStepping();
         if (source is not null)
         {
             LastMethod = ConvergenceMethod.SourceStepping;
-            return source;
+            return Polish(source);
         }
 
         throw new ConvergenceException(
             $"直流工作點不收斂（已嘗試 Newton、gmin 步進與電源步進）。最後未收斂的是：{_lastWorst}。", _lastWorst);
+    }
+
+    /// <summary>
+    /// 收斂後再做一次 Newton 迭代：二次收斂使誤差遠小於收斂門檻，
+    /// 讓直流工作點的精度不受 reltol 限制（只用於工作點，不用於暫態的每一步）。
+    /// </summary>
+    private double[] Polish(double[] x)
+    {
+        var polished = system.AssembleAndSolve(x, 0);
+        Iterations++;
+        return polished.All(double.IsFinite) ? polished : x;
     }
 
     private double[]? GminStepping(double[] x0)
