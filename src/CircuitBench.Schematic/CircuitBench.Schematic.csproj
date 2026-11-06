@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CircuitBench.Schematic</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CircuitBench.Core\CircuitBench.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CircuitBench.TestKit</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <ProjectReference Include="..\..\src\CircuitBench.Core\CircuitBench.Core.csproj" />
+    <ProjectReference Include="..\..\src\CircuitBench.Schematic\CircuitBench.Schematic.csproj" />
+    <ProjectReference Include="..\CircuitBench.ReferenceSolver\CircuitBench.ReferenceSolver.csproj" />
+  </ItemGroup>
+</Project>

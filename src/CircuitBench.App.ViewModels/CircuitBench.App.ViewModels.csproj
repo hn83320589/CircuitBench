@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CircuitBench.App.ViewModels</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <ProjectReference Include="..\CircuitBench.Core\CircuitBench.Core.csproj" />
+    <ProjectReference Include="..\CircuitBench.Schematic\CircuitBench.Schematic.csproj" />
+  </ItemGroup>
+</Project>

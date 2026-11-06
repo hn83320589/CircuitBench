@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 刻意不參考任何正式專案：參考求解器必須與正式程式碼互相獨立。 -->
+  <PropertyGroup>
+    <RootNamespace>CircuitBench.ReferenceSolver</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>
