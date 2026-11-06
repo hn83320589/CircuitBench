@@ -2,6 +2,7 @@
   <PropertyGroup>
     <RootNamespace>CircuitBench.TestKit</RootNamespace>
     <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit" />
