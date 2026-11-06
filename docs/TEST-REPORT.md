@@ -3,26 +3,26 @@
 | 項目 | 內容 |
 |---|---|
 | 報告日期 | 2026-11-06 |
-| 受測版本 | commit `780a46e`（main） |
+| 受測版本 | 初版 commit `780a46e`；審查修正後重新驗證（見第 7 節） |
 | 本機環境 | Intel Core i7-13700、32 GB RAM、Windows 11、.NET SDK 9.0.315、Release 組態 |
 | CI | GitHub Actions run [42166516117](https://github.com/hn83320589/CircuitBench/actions/runs/42166516117)，`windows-latest`：全部步驟成功 |
 
 ## 1. 結論
 
-**26 項驗收標準全部有自動化測試或文件佐證，且全部通過。**
+**26 項驗收標準全部有自動化測試或文件佐證，且全部通過。** 審查回饋的三個問題已修正並重新驗證，詳見第 7 節。
 
 | 驗證項目 | 結果 |
 |---|---|
 | 建置 | `dotnet build -c Release`：0 個警告、0 個錯誤（`TreatWarningsAsErrors` 已開啟） |
-| 功能測試 | 333 個，全數通過、0 略過 |
-| 性質測試 | 15 組 |
-| 效能測試 | 4 項，皆在門檻內 |
+| 功能測試 | 344 個，全數通過、0 略過 |
+| 性質測試 | 17 組 |
+| 效能測試 | 5 項，皆在門檻內（含 Skia 完整重繪） |
 
-有 3 點需要特別說明，詳見第 5 節：
+原本附條件的兩項已經解決：
+- 驗收標準 8：欠阻尼 RLC 改用**預設**設定也能通過。
+- 驗收標準 22：已補上 Skia 實際繪製的自動化量測。
 
-1. 驗收標準 8 的欠阻尼 RLC：最大步長要設為振盪週期的 1/100 才能達到 0.2%，預設步長不夠。
-2. 驗收標準 22 的「重繪 ≤ 16 ms」：自動化量測的是抽樣與刻度計算，沒有包含 Skia 的實際繪製時間。
-3. CI 上的效能測試只供參考，不影響 CI 是否通過。
+目前只剩一點需要說明：CI 上的效能測試只供參考，不影響 CI 是否通過（見第 5 節）。
 
 ## 2. 測試執行摘要
 
@@ -86,7 +86,7 @@
 | 5 | 300 組隨機線性電路的直流工作點，相對誤差 ≤ 1e-9 | 性質測試 #4（含 R、V、I、E、G） | ✅ |
 | 6 | 非線性直流：Lambert W、橋式整流、反向偏壓；步進收斂並在診斷頁顯示方法 | `NonlinearDcTests`（13）；`DiagnosticsShowsSteppingMethod`（ViewModel） | ✅ |
 | 7 | 直流掃描與逐點工作點一致 | `DcSweepTests.SweepMatchesPointwiseOperatingPoints` | ✅ |
-| 8 | RC 步階誤差 ≤ 1e-3·max + 1e-6 V；RLC 頻率與衰減率誤差 ≤ 0.2% | `RcStepResponseMatchesAnalyticSolution`（預設設定）；`UnderdampedRlcFrequencyAndDecayMatchAnalytic`（最大步長 = 週期/100，見 5.1） | ✅（附條件） |
+| 8 | RC 步階誤差 ≤ 1e-3·max + 1e-6 V；RLC 頻率與衰減率誤差 ≤ 0.2% | `RcStepResponseMatchesAnalyticSolution`、`UnderdampedRlcFrequencyAndDecayMatchAnalytic`，**皆使用預設設定**（RLC 頻率誤差 0.033%、衰減率誤差 0.098%） | ✅ |
 | 9 | LC 100 週期能量漂移 ≤ 1%；開關切斷電感電流無逐步交替 | `LosslessLcOscillatesHundredPeriods…`；`SwitchInterruptingInductorCurrent…`（有、無並聯電阻兩種）；`StiffnessAppearingWithoutBreakpointDoesNotRing` | ✅ |
 | 10 | 轉折點為精確時間點（≤ 1e-15 s），轉折前後不跨越 | `PulsePwlAndSwitchBreakpointsAreExactTimePoints`、`PulseValuesAtCornersAreHitExactly` | ✅ |
 | 11 | 拒絕的步驟不留在結果中、時間嚴格遞增、遵守最大步長 | 性質測試 #6；`SharpPulseCausesRejectedSteps…` | ✅ |
@@ -100,7 +100,7 @@
 | 19 | 復原與重做至少 100 層，每步都回到前一狀態 | 性質測試 #12；`AtLeastHundredLevelsAndOldestDroppedBeyondCapacity` | ✅ |
 | 20 | 專案檔往返無損、版本過新或損毀有明確訊息、自動儲存與當機回復 | `PersistenceTests`（20，含 15 種損毀輸入）、性質測試 #15、`AutoSaveTests`（4，含模擬當機後回復） | ✅ |
 | 21 | SPICE 網表匯出再匯入相同、語法錯誤指出行號 | 性質測試 #13；`ExportThenImportGivesSameCircuit…`；`SyntaxErrorsReportLineNumberAndReason`（12 種） | ✅ |
-| 22 | 效能四項，README 載明量測環境 | 第 3 節；README「效能」一節 | ✅（重繪見 5.2） |
+| 22 | 效能四項，README 載明量測環境 | 第 3 節；README「效能」一節；`RenderPerformanceTests`（Skia 完整重繪） | ✅ |
 | 23 | ViewModel 測試，以及至少 3 個 Avalonia Headless 測試 | `EditorViewModelTests`（15：工具切換、選取、拖曳、旋轉、標籤命名、檢查標示）；`HeadlessTests`（5） | ✅ |
 | 24 | 至少 250 個案例（含 8 組性質測試），全數通過 | 333 個案例、15 組性質測試 | ✅ |
 | 25 | README 含規定的各節內容 | 建置、截圖（4 張，由 Headless 測試產生）、架構、MNA、稀疏 LU／符號分解重用、暫態與步長控制、收斂策略、效能數據、設計取捨、已知限制 | ✅ |
@@ -119,7 +119,7 @@
 
 ## 5. 需要說明的事項
 
-### 5.1 驗收標準 8：欠阻尼 RLC 需要設定最大步長
+### 5.1 （已解決，見第 7 節）驗收標準 8：欠阻尼 RLC 需要設定最大步長
 
 梯形法的頻率誤差約為 (ωh)²/12，衰減率誤差約為 (ωh)²/4。LTE 步長控制管的是每一步的局部誤差，不是長時間累積的相位誤差，所以在預設最大步長（停止時間的 1/50）下：
 
@@ -128,7 +128,7 @@
 
 標準要求的是準確度，沒有規定分析設定，而最大步長本來就是使用者可以設定的參數，所以判定為通過。README 的「暫態積分」與「已知限制」都寫了這個建議。如果驗收方要求預設設定也要達標，就得調降預設的 LTE 容許值或預設最大步長，代價是所有暫態分析的點數都會增加。
 
-### 5.2 驗收標準 22：「重繪 ≤ 16 ms」的量測範圍
+### 5.2 （已解決，見第 7 節）驗收標準 22：「重繪 ≤ 16 ms」的量測範圍
 
 自動化測試量的是每次重繪時，ViewModel 依目前範圍把兩條 100 萬點曲線抽樣成每像素欄的最小/最大值，再加上刻度計算的時間。繪圖控制項只畫這些抽樣結果（每條曲線約 2 × 1,920 個頂點）。
 
@@ -163,3 +163,84 @@ dotnet test tests/CircuitBench.Performance.Tests -c Release --filter "Category=P
 $env:CIRCUITBENCH_WRITE_SAMPLES=1; dotnet test tests/CircuitBench.App.ViewModels.Tests --filter "FullyQualifiedName~SampleTests"
 $env:CIRCUITBENCH_SCREENSHOTS="docs/images"; dotnet test tests/CircuitBench.App.Headless.Tests
 ```
+
+## 7. 審查回饋與修正
+
+審查在交付結果中指出三個問題。三個都已修正，並以會失敗的測試先重現，再修到通過。
+
+### 7.1 數值上奇異的矩陣沒有被偵測（最嚴重）
+
+**問題**：下面這個網表能通過全部電路檢查，卻得到 `V(n1) = 3.07e15 V`，沒有任何錯誤或警告。審查者另外測試 44 個秩虧 1 的隨機矩陣，有 22 個被當成正常矩陣求解。
+
+```
+I1 0 n1 DC 1m
+R1 n1 0 3k
+G1 n1 0 n1 0 -0.000333333333333333
+```
+
+**原因**：受控源的負電導剛好抵消電阻的電導，這個抵消發生在**同一個矩陣元素內**。舊的判定以「抵消後的殘值」當作尺度，所以判定永遠不會成立。另外，消去過程中累積的捨入誤差也可能蓋過固定門檻。
+
+**修正**（commit `fix(core): 偵測同元素內抵消…`）：
+- 組裝時，為每個元素記錄「所有蓋印值絕對值的最大者」。主元判定的尺度取它與消去過程中的最大更新量，兩者較大者。
+- 求解後計算列縮放條件數下界 ‖x‖∞ / maxᵢ(|bᵢ|/rᵢ)，超過 1e12 時以中文提示「電路矩陣接近奇異…受控源形成的負電阻剛好抵消其他電導」，並列出相關元件。
+
+**驗證**：
+
+| 測試 | 結果 |
+|---|---|
+| 審查者的網表（`NegativeResistanceCancellingInsideOneElementIsReported`） | 回報奇異，指出節點 n1 與 I1、R1、G1 |
+| 兩個殘值在捨入邊緣的變體 | 回報奇異 |
+| 增益剛好為 1 的 VCVS 回授 | 回報奇異 |
+| `Property_RankDeficientMatricesAreDetected`（300 個秩虧矩陣） | **300/300 偵測** |
+| `Property_WellConditionedMatricesAreNotFlagged`（200 個良態矩陣） | 0 誤報 |
+| 合法的負電阻（只抵消一半）、電流灌進 Roff = 1 TΩ 節點得到 1e6 V | 正常求解，不誤判 |
+
+### 7.2 預設步長對振盪與驅動訊號不夠
+
+**問題**：
+- 欠阻尼 RLC 在預設設定下，頻率誤差 0.43%、衰減率誤差 1.39%，超過驗收標準 8 的 0.2%。
+- 純電阻的半波整流沒有狀態量，LTE 恆為 0，預設每週期只有約 25 點，畫出的折線與真實波形相差 1.4–1.8% 峰值。
+
+**修正**（commit `feat(core): 預設設定下振盪與驅動訊號的暫態也準確`）：
+- SIN 電源：步長上限自動設為週期的 1/50。
+- 自由振盪：追蹤狀態量的相鄰極值估計週期，限制為每週期約 100 步；振盪衰減後自動解除。
+- 折線內插誤差控制：以所有未知數的二階除差估計 h²|x″|/8，超過容許值即縮小步長。
+- 分析設定畫面加上說明文字。
+
+**驗證**（預設設定）：
+
+| 項目 | 修改前 | 修改後 |
+|---|---|---|
+| 欠阻尼 RLC 頻率誤差 | 0.457% | **0.033%** |
+| 欠阻尼 RLC 衰減率誤差 | 1.368% | **0.098%** |
+| 半波整流：畫出的折線 vs 真實波形 | 1.31% 峰值 | **0.08% 峰值** |
+| LC 振盪每週期點數／能量漂移 | 33 點／< 0.001% | 100 點／< 0.001% |
+| RC 步階（5 ms）點數 | 91 | 108 |
+| 2,000 節點 RC 梯形暫態效能 | 約 1.7–3.0 s | 約 2.1 s（門檻 10 s） |
+
+相關測試：
+- 驗收標準 8 的 RLC 測試改為預設設定。
+- 整流測試新增「在參考解每個時間點上比較畫出的折線」，門檻 0.5% 峰值。
+- 新增 `SineDrivenResistiveCircuitGetsAtLeastFiftyPointsPerPeriod` 與 `FreeOscillationStepCapExpiresAfterOscillationDies`。
+
+### 7.3 「重繪 ≤ 16 ms」沒有包含 Skia 實際繪製
+
+**問題**：原本只量了抽樣與刻度計算。
+
+**修正**（commit `perf(app): 以 Skia 實際繪製量測…`）：新增 `RenderPerformanceTests`，以 `RenderTargetBitmap` 讓 Skia 實際光柵化 WaveformCanvas（1750×899、100 萬點 × 2 條曲線），在縮放與平移下重繪 100 次。
+
+**第一次量測就發現問題**：平均 12 ms、最差 **23.5 ms，確實超過門檻**。優化項目：
+- 快取刻度文字的 `FormattedText`，`Pen` 改為共用。
+- 曲線改用非反鋸齒繪製。
+- 抽樣結果改寫入重用的緩衝區，減少 GC 停頓。
+
+**優化後連續 5 次執行**：平均約 5 ms，最差 10.0–15.1 ms，全部 ≤ 16 ms。整個視窗的 `CaptureRenderedFrame`（含版面配置與讀回 8 MB 點陣圖）最差約 16 ms，僅供參考。
+
+**注意**：
+- 最差值距離門檻不大，在較慢的機器上可能超過。
+- 這是 Headless 的 CPU 光柵化，實機預設使用 GPU 繪製。
+- CI 效能步驟也會執行這項測試，僅供參考。
+
+### 7.4 審查者未獨立驗證的項目
+
+審查者說明 gmin 步進與電源步進的路徑沒有構造出需要它們的電路。本專案的 `HardCircuitConvergesThroughSteppingWithFewIterations` 以壓低迭代上限的二極體串，迫使流程走到步進；`GminSteppingIsUsedAndReportedWhenDirectNewtonIsSkipped` 則直接略過 Newton。兩者都驗證了步進後的解與參考求解器一致，以及診斷資訊記錄的方法。但在預設的迭代上限下，「自然需要步進」的電路仍未找到，這一點照實保留。
