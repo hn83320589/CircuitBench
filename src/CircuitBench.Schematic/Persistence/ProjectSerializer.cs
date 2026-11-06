@@ -19,7 +19,7 @@ public static class ProjectSerializer
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
@@ -135,9 +135,15 @@ public static class ProjectSerializer
         switch (e.Type)
         {
             case "component":
-                if (e.Kind is null)
+                if (e.Kind is null || !Enum.IsDefined(e.Kind.Value))
                 {
-                    error = "元件缺少 kind。";
+                    error = "元件缺少 kind 或類型不存在。";
+                    return null;
+                }
+
+                if (e.Parameters?.Values.Any(v => v is null) == true)
+                {
+                    error = "元件參數的值不可為 null。";
                     return null;
                 }
 
