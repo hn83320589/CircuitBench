@@ -38,6 +38,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Bode = new BodeViewModel();
         Diagnostics = new DiagnosticsViewModel();
         Analysis = new AnalysisViewModel(Editor, simulator, Waveform, Bode, Diagnostics);
+        AnalysisForm = new AnalysisSettingsViewModel(Analysis);
+        Properties = new PropertyPanelViewModel(Editor);
         Analysis.Completed += (_, kind) => CurrentPage = kind switch
         {
             AnalysisKind.Ac => Page.Bode,
@@ -45,6 +47,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
             _ => Page.Waveform,
         };
         Analysis.Failed += (_, message) => _ = _messages.ShowErrorAsync("分析未執行", message);
+        Analysis.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AnalysisViewModel.Settings))
+            {
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(Title));
+            }
+        };
         Editor.DocumentChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(IsDirty));
@@ -56,6 +66,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public EditorViewModel Editor { get; }
 
     public AnalysisViewModel Analysis { get; }
+
+    public AnalysisSettingsViewModel AnalysisForm { get; }
+
+    public PropertyPanelViewModel Properties { get; }
 
     public WaveformViewModel Waveform { get; }
 
@@ -337,6 +351,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         AutoSave.Start(Snapshot, () => IsDirty);
     }
+
+    /// <summary>視窗要關閉時詢問：有未儲存的變更時需要使用者確認。回傳是否可以關閉。</summary>
+    public async Task<bool> ConfirmCloseAsync() =>
+        !IsDirty || await _messages.ConfirmAsync("結束", "電路尚未儲存，確定要結束嗎？（未儲存的變更會遺失）");
 
     /// <summary>關閉前呼叫（正常關閉）。</summary>
     public void Shutdown() => AutoSave?.MarkCleanShutdown();

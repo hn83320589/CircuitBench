@@ -52,6 +52,7 @@ public static class WaveformSvgExporter
             double Sy(double v) => top + plotH - (v - axis.Min) / (axis.Max - axis.Min) * plotH;
             var cols = vm.Columns(trace, plotW);
             var points = new StringBuilder();
+            var lastY = 0.0;
             for (var i = 0; i < cols.Length; i++)
             {
                 if (!cols[i].HasData)
@@ -59,8 +60,13 @@ public static class WaveformSvgExporter
                     continue;
                 }
 
+                // 先連到離上一點較近的一端（與畫面繪製相同），避免邊緣處出現假尖刺
                 var x = left + i + 0.5;
-                points.Append(CultureInfo.InvariantCulture, $"{F(x)},{F(Sy(cols[i].Min))} {F(x)},{F(Sy(cols[i].Max))} ");
+                var yMax = Sy(cols[i].Max);
+                var yMin = Sy(cols[i].Min);
+                var (first, second) = Math.Abs(yMax - lastY) <= Math.Abs(yMin - lastY) ? (yMax, yMin) : (yMin, yMax);
+                points.Append(CultureInfo.InvariantCulture, $"{F(x)},{F(first)} {F(x)},{F(second)} ");
+                lastY = second;
             }
 
             var color = Palette[trace.ColorIndex % Palette.Length];

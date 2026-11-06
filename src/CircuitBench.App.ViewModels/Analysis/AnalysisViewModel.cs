@@ -48,9 +48,9 @@ public sealed partial class AnalysisViewModel : ObservableObject
     [ObservableProperty]
     private string _status = "就緒";
 
-    /// <summary>直流工作點結果（顯示在結果表）。</summary>
+    /// <summary>直流工作點結果（顯示在診斷頁的結果表）。</summary>
     [ObservableProperty]
-    private IReadOnlyList<(string Signal, string Value)> _operatingPoint = [];
+    private IReadOnlyList<DiagnosticRow> _operatingPointRows = [];
 
     /// <summary>分析完成後應切換到的結果頁。</summary>
     public event EventHandler<AnalysisKind>? Completed;
@@ -105,8 +105,8 @@ public sealed partial class AnalysisViewModel : ObservableObject
                 {
                     Status = "直流工作點計算中…";
                     var r = await _simulator.OperatingPointAsync(circuit, options, progress, _cts.Token);
-                    OperatingPoint = r.Values.OrderBy(v => v.Key.Kind).ThenBy(v => v.Key.Name, StringComparer.OrdinalIgnoreCase)
-                        .Select(v => (v.Key.ToString(), EngineeringNotation.Format(v.Value, v.Key.Kind == SignalKind.Voltage ? "V" : "A", 6)))
+                    OperatingPointRows = r.Values.OrderBy(v => v.Key.Kind).ThenBy(v => v.Key.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(v => new DiagnosticRow(v.Key.ToString(), EngineeringNotation.Format(v.Value, v.Key.Kind == SignalKind.Voltage ? "V" : "A", 6)))
                         .ToList();
                     Diagnostics.Load("直流工作點", r.Statistics);
                     break;

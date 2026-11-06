@@ -61,7 +61,7 @@ public class AnalysisViewModelTests
         var vm = RcCircuit();
         vm.Analysis.Settings = vm.Analysis.Settings with { Kind = AnalysisKind.OperatingPoint };
         await vm.Analysis.RunAsync();
-        Assert.Contains(vm.Analysis.OperatingPoint, r => r.Signal == "V(out)" && r.Value == "1V");
+        Assert.Contains(vm.Analysis.OperatingPointRows, r => r.LabelZh == "V(out)" && r.Value == "1V");
         Assert.Equal(Page.Diagnostics, vm.CurrentPage);
         Assert.Contains(vm.Diagnostics.Rows, r => r.Value == "線性電路（直接求解）");
     }
@@ -362,7 +362,7 @@ public class MainWindowFileTests : IDisposable
         Assert.Equal(3, vm.Editor.Document.Components.Count());
         Assert.Equal(AnalysisKind.OperatingPoint, vm.Analysis.Settings.Kind);
         await vm.Analysis.RunAsync();
-        Assert.Contains(vm.Analysis.OperatingPoint, r => r.Signal == "V(out)" && r.Value == "5V");
+        Assert.Contains(vm.Analysis.OperatingPointRows, r => r.LabelZh == "V(out)" && r.Value == "5V");
 
         var exported = Path.Combine(_dir, "out.cir");
         dialogs.NextPaths.Enqueue(exported);

@@ -1,6 +1,256 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CircuitBench.App.ViewModels"
+        xmlns:ed="using:CircuitBench.App.ViewModels.Editor"
+        xmlns:an="using:CircuitBench.App.ViewModels.Analysis"
+        xmlns:res="using:CircuitBench.App.ViewModels.Results"
+        xmlns:model="using:CircuitBench.Schematic.Model"
+        xmlns:val="using:CircuitBench.Core.Validation"
+        xmlns:c="using:CircuitBench.App.Controls"
+        xmlns:conv="using:CircuitBench.App.Converters"
         x:Class="CircuitBench.App.Views.MainWindow"
-        Title="電路實驗台 CircuitBench" Width="1280" Height="800">
-  <TextBlock Text="CircuitBench" />
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding Title}"
+        Width="1360" Height="860"
+        FontFamily="Microsoft JhengHei, Microsoft YaHei, Segoe UI"
+        FontSize="13">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+N" Command="{Binding NewCommand}" />
+    <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenCommand}" />
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
+    <KeyBinding Gesture="Ctrl+Z" Command="{Binding Editor.UndoCommand}" />
+    <KeyBinding Gesture="Ctrl+Y" Command="{Binding Editor.RedoCommand}" />
+    <KeyBinding Gesture="F5" Command="{Binding Analysis.RunCommand}" />
+  </Window.KeyBindings>
+
+  <DockPanel>
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="檔案(_F)">
+        <MenuItem Header="新增(_N)" Command="{Binding NewCommand}" InputGesture="Ctrl+N" />
+        <MenuItem Header="開啟(_O)…" Command="{Binding OpenCommand}" InputGesture="Ctrl+O" />
+        <MenuItem Header="儲存(_S)" Command="{Binding SaveCommand}" InputGesture="Ctrl+S" />
+        <MenuItem Header="另存新檔(_A)…" Command="{Binding SaveAsCommand}" />
+        <Separator />
+        <MenuItem Header="匯入 SPICE 網表…" Command="{Binding ImportNetlistCommand}" />
+        <MenuItem Header="匯出 SPICE 網表…" Command="{Binding ExportNetlistCommand}" />
+        <MenuItem Header="匯出電路圖 SVG…" Command="{Binding ExportSchematicSvgCommand}" />
+        <MenuItem Header="匯出波形 CSV…" Command="{Binding ExportCsvCommand}" />
+        <MenuItem Header="匯出波形 SVG…" Command="{Binding ExportWaveformSvgCommand}" />
+      </MenuItem>
+      <MenuItem Header="編輯(_E)">
+        <MenuItem Header="復原" Command="{Binding Editor.UndoCommand}" InputGesture="Ctrl+Z" />
+        <MenuItem Header="重做" Command="{Binding Editor.RedoCommand}" InputGesture="Ctrl+Y" />
+        <Separator />
+        <MenuItem Header="複製" Command="{Binding Editor.CopyCommand}" InputGesture="Ctrl+C" />
+        <MenuItem Header="貼上" Command="{Binding Editor.PasteCommand}" InputGesture="Ctrl+V" />
+        <MenuItem Header="刪除" Command="{Binding Editor.DeleteCommand}" InputGesture="Delete" />
+        <MenuItem Header="全選" Command="{Binding Editor.SelectAllCommand}" InputGesture="Ctrl+A" />
+        <Separator />
+        <MenuItem Header="旋轉 90°" Command="{Binding Editor.RotateCommand}" InputGesture="R" />
+        <MenuItem Header="左右鏡射" Command="{Binding Editor.MirrorCommand}" InputGesture="M" />
+      </MenuItem>
+      <MenuItem Header="分析(_A)">
+        <MenuItem Header="執行分析" Command="{Binding Analysis.RunCommand}" InputGesture="F5" />
+        <MenuItem Header="取消分析" Command="{Binding Analysis.CancelCommand}" />
+      </MenuItem>
+    </Menu>
+
+    <!-- 狀態列 -->
+    <Border DockPanel.Dock="Bottom" Background="#F1F3F7" BorderBrush="#D5D9E0" BorderThickness="0,1,0,0" Padding="8,4">
+      <DockPanel>
+        <ProgressBar DockPanel.Dock="Right" Width="200" Minimum="0" Maximum="1" Value="{Binding Analysis.Progress}" IsVisible="{Binding Analysis.IsRunning}" />
+        <TextBlock DockPanel.Dock="Right" Margin="0,0,12,0" Text="{Binding Analysis.Status}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding Editor.StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <TabControl SelectedIndex="{Binding CurrentPage, Converter={x:Static conv:PageToIndexConverter.Instance}}" Padding="0">
+
+      <!-- 電路圖 -->
+      <TabItem Header="電路圖" x:Name="EditorTab">
+        <DockPanel>
+          <!-- 工具列 -->
+          <WrapPanel DockPanel.Dock="Top" Margin="6,4" Orientation="Horizontal">
+            <WrapPanel.Styles>
+              <Style Selector="Button">
+                <Setter Property="Margin" Value="2" />
+                <Setter Property="Padding" Value="10,4" />
+              </Style>
+            </WrapPanel.Styles>
+            <Button Content="選取" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Select}" ToolTip.Tip="點選、拖曳移動、框選（Esc）" />
+            <Button Content="導線" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Wire}" x:Name="WireToolButton" />
+            <Button Content="平移" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Pan}" />
+            <Border Width="1" Background="#CCC" Margin="6,2" />
+            <Button Content="電阻 R" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Resistor}" x:Name="PlaceResistorButton" />
+            <Button Content="電容 C" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Capacitor}" />
+            <Button Content="電感 L" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Inductor}" />
+            <Button Content="電壓源 V" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.VoltageSource}" />
+            <Button Content="電流源 I" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.CurrentSource}" />
+            <Button Content="二極體 D" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Diode}" />
+            <Button Content="VCVS E" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Vcvs}" />
+            <Button Content="VCCS G" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Vccs}" />
+            <Button Content="開關 S" Command="{Binding Editor.PlaceCommand}" CommandParameter="{x:Static model:ComponentKind.Switch}" />
+            <Border Width="1" Background="#CCC" Margin="6,2" />
+            <Button Content="網路標籤" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Label}" />
+            <TextBox Text="{Binding Editor.LabelName}" Width="80" Margin="2" VerticalAlignment="Center" Watermark="標籤名稱" />
+            <Button Content="接地" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Ground}" />
+            <Border Width="1" Background="#CCC" Margin="6,2" />
+            <Button Content="旋轉 (R)" Command="{Binding Editor.RotateCommand}" />
+            <Button Content="鏡射 (M)" Command="{Binding Editor.MirrorCommand}" />
+            <Button Content="刪除" Command="{Binding Editor.DeleteCommand}" />
+            <Button Content="檢查電路" Click="OnCheckClicked" />
+          </WrapPanel>
+
+          <!-- 右側面板 -->
+          <ScrollViewer DockPanel.Dock="Right" Width="330" Background="#FAFBFC">
+            <StackPanel Margin="10" Spacing="10">
+              <TextBlock Text="{Binding Properties.Header}" FontWeight="Bold" FontSize="15" />
+              <ItemsControl ItemsSource="{Binding Properties.Fields}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="ed:ParameterField">
+                    <StackPanel Margin="0,0,0,8" Spacing="2">
+                      <TextBlock Text="{Binding Label}" />
+                      <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" Watermark="{Binding Hint}" ToolTip.Tip="{Binding Hint}" />
+                      <TextBlock Text="{Binding Error}" Foreground="Red" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Separator />
+              <TextBlock Text="分析設定" FontWeight="Bold" FontSize="15" />
+              <ComboBox ItemsSource="{x:Static an:AnalysisSettingsViewModel.KindNames}" SelectedIndex="{Binding AnalysisForm.KindIndex}" HorizontalAlignment="Stretch" />
+              <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Text="暫態停止時間" VerticalAlignment="Center" />
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AnalysisForm.TranStop}" Margin="0,2" />
+                <TextBlock Grid.Row="1" Text="最大步長" VerticalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding AnalysisForm.TranMaxStep}" Watermark="預設為停止時間/50" Margin="0,2" />
+                <TextBlock Grid.Row="2" Text="掃描電源" VerticalAlignment="Center" />
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding AnalysisForm.DcSource}" Margin="0,2" />
+                <TextBlock Grid.Row="3" Text="掃描起/終/步" VerticalAlignment="Center" />
+                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="2" Margin="0,2">
+                  <TextBox Text="{Binding AnalysisForm.DcStart}" Width="60" />
+                  <TextBox Text="{Binding AnalysisForm.DcStop}" Width="60" />
+                  <TextBox Text="{Binding AnalysisForm.DcStep}" Width="60" />
+                </StackPanel>
+                <TextBlock Grid.Row="4" Text="交流起始頻率" VerticalAlignment="Center" />
+                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding AnalysisForm.AcStart}" Margin="0,2" />
+                <TextBlock Grid.Row="5" Text="交流終止頻率" VerticalAlignment="Center" />
+                <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding AnalysisForm.AcStop}" Margin="0,2" />
+                <TextBlock Grid.Row="6" Text="點數" VerticalAlignment="Center" />
+                <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,2">
+                  <TextBox Text="{Binding AnalysisForm.AcPoints}" Width="60" />
+                  <CheckBox Content="每十倍頻（對數）" IsChecked="{Binding AnalysisForm.AcDecade}" />
+                </StackPanel>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="執行分析 (F5)" Command="{Binding Analysis.RunCommand}" Classes="accent" x:Name="RunButton" />
+                <Button Content="取消" Command="{Binding Analysis.CancelCommand}" />
+              </StackPanel>
+
+              <Separator />
+              <TextBlock Text="電路檢查結果" FontWeight="Bold" FontSize="15" />
+              <ItemsControl ItemsSource="{Binding Editor.Issues}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="val:CircuitIssue">
+                    <Border BorderBrush="#E5A0A0" Background="#FFF4F4" BorderThickness="1" CornerRadius="3" Padding="6" Margin="0,0,0,6">
+                      <TextBlock Text="{Binding MessageZh}" TextWrapping="Wrap" Foreground="#902020" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+
+          <c:SchematicCanvas x:Name="Canvas" Editor="{Binding Editor}">
+            <c:SchematicCanvas.KeyBindings>
+              <KeyBinding Gesture="R" Command="{Binding Editor.RotateCommand}" />
+              <KeyBinding Gesture="M" Command="{Binding Editor.MirrorCommand}" />
+              <KeyBinding Gesture="Delete" Command="{Binding Editor.DeleteCommand}" />
+              <KeyBinding Gesture="Ctrl+C" Command="{Binding Editor.CopyCommand}" />
+              <KeyBinding Gesture="Ctrl+V" Command="{Binding Editor.PasteCommand}" />
+              <KeyBinding Gesture="Ctrl+A" Command="{Binding Editor.SelectAllCommand}" />
+              <KeyBinding Gesture="Escape" Command="{Binding Editor.EscapeCommand}" />
+              <KeyBinding Gesture="W" Command="{Binding Editor.ChooseToolCommand}" CommandParameter="{x:Static ed:EditorTool.Wire}" />
+            </c:SchematicCanvas.KeyBindings>
+          </c:SchematicCanvas>
+        </DockPanel>
+      </TabItem>
+
+      <!-- 波形 -->
+      <TabItem Header="波形">
+        <DockPanel>
+          <Border DockPanel.Dock="Bottom" Padding="10,6" Background="#F7F8FA" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top" Margin="0,0,16,0">
+                <TextBlock Text="量測訊號" VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding Waveform.AvailableSignals}" SelectedItem="{Binding Waveform.MeasuredSignal}" MinWidth="120" />
+                <Button Content="自動縮放" Command="{Binding Waveform.AutoScaleCommand}" />
+              </StackPanel>
+              <TextBlock Text="{Binding Waveform.ReadoutText}" FontFamily="Consolas, Microsoft JhengHei" TextWrapping="Wrap" />
+            </DockPanel>
+          </Border>
+          <Border DockPanel.Dock="Left" Width="170" BorderBrush="#DDD" BorderThickness="0,0,1,0">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="顯示的訊號" FontWeight="Bold" Margin="8,6" />
+              <TextBlock DockPanel.Dock="Bottom" Margin="8" TextWrapping="Wrap" Foreground="#666" FontSize="11"
+                         Text="滾輪：縮放時間軸；Ctrl+滾輪：縮放 Y 軸；拖曳：平移；Shift+左鍵：游標 A；右鍵：游標 B；雙擊：自動縮放。" />
+              <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Waveform.SignalToggles}" Margin="8,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="an:SignalToggle">
+                      <CheckBox Content="{Binding Label}" IsChecked="{Binding IsShown}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </Border>
+          <c:WaveformCanvas x:Name="WaveformPlot" Waveform="{Binding Waveform}" />
+        </DockPanel>
+      </TabItem>
+
+      <!-- 波德圖 -->
+      <TabItem Header="波德圖">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="10,6" Spacing="6">
+            <TextBlock Text="訊號" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding Bode.AvailableSignals}" SelectedItem="{Binding Bode.SelectedSignal}" MinWidth="140" />
+          </StackPanel>
+          <c:BodeCanvas Bode="{Binding Bode}" />
+        </DockPanel>
+      </TabItem>
+
+      <!-- 診斷 -->
+      <TabItem Header="診斷">
+        <ScrollViewer>
+          <StackPanel Margin="16" Spacing="12">
+            <TextBlock Text="{Binding Diagnostics.AnalysisName}" FontSize="16" FontWeight="Bold" />
+            <ItemsControl ItemsSource="{Binding Diagnostics.Rows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="res:DiagnosticRow">
+                  <Grid ColumnDefinitions="280,*" Margin="0,2">
+                    <TextBlock Text="{Binding LabelZh}" Foreground="#555" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontWeight="SemiBold" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="直流工作點" FontSize="16" FontWeight="Bold" Margin="0,12,0,0" />
+            <ItemsControl ItemsSource="{Binding Analysis.OperatingPointRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="res:DiagnosticRow">
+                  <Grid ColumnDefinitions="280,*" Margin="0,2">
+                    <TextBlock Text="{Binding LabelZh}" FontFamily="Consolas" />
+                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontFamily="Consolas" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
 </Window>

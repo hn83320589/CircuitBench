@@ -64,6 +64,9 @@ public sealed partial class WaveformViewModel : ObservableObject
 
     public ObservableCollection<Trace> Traces { get; } = [];
 
+    /// <summary>訊號清單（勾選即顯示）。</summary>
+    public ObservableCollection<Analysis.SignalToggle> SignalToggles { get; } = [];
+
     public Dictionary<string, YAxis> Axes { get; } = [];
 
     [ObservableProperty]
@@ -109,9 +112,16 @@ public sealed partial class WaveformViewModel : ObservableObject
         Traces.Clear();
         Axes.Clear();
         var wanted = (preferred ?? previous).Where(data.Signals.ContainsKey).ToList();
-        if (wanted.Count == 0 && AvailableSignals.FirstOrDefault(s => s.Kind == SignalKind.Voltage) is { Name: not null } first)
+        if (wanted.Count == 0)
         {
-            wanted.Add(first);
+            // 優先顯示使用者命名的節點（網路標籤），其次才是自動命名的 N$…
+            var voltages = AvailableSignals.Where(s => s.Kind == SignalKind.Voltage).ToList();
+            var named = voltages.Where(s => !s.Name.StartsWith(Schematic.Connectivity.ConnectivityExtractor.AutoNetPrefix, StringComparison.Ordinal)).ToList();
+            var pick = named.Count > 0 ? named : voltages;
+            if (pick.Count > 0)
+            {
+                wanted.Add(pick[0]);
+            }
         }
 
         foreach (var id in wanted)
@@ -124,8 +134,36 @@ public sealed partial class WaveformViewModel : ObservableObject
         CursorA = XMin + (XMax - XMin) * 0.25;
         CursorB = XMin + (XMax - XMin) * 0.75;
         MeasuredSignal = Traces.FirstOrDefault()?.Id;
+        RebuildToggles();
         AutoScale();
         OnPropertyChanged(nameof(HasData));
+    }
+
+    private void SyncToggles()
+    {
+        foreach (var t in SignalToggles)
+        {
+            t.SetShownSilently(Traces.Any(x => x.Id.Equals(t.Id)));
+        }
+    }
+
+    private void RebuildToggles()
+    {
+        SignalToggles.Clear();
+        foreach (var id in AvailableSignals)
+        {
+            SignalToggles.Add(new Analysis.SignalToggle(id, Traces.Any(t => t.Id.Equals(id)), (s, shown) =>
+            {
+                if (shown)
+                {
+                    AddTrace(s);
+                }
+                else
+                {
+                    RemoveTrace(s);
+                }
+            }));
+        }
     }
 
     public void Clear()
@@ -134,6 +172,7 @@ public sealed partial class WaveformViewModel : ObservableObject
         Traces.Clear();
         Axes.Clear();
         AvailableSignals.Clear();
+        SignalToggles.Clear();
         OnPropertyChanged(nameof(HasData));
         Raise();
     }
@@ -147,6 +186,7 @@ public sealed partial class WaveformViewModel : ObservableObject
 
         AddTraceInternal(id);
         MeasuredSignal ??= id;
+        SyncToggles();
         AutoScaleY();
         Raise();
     }
@@ -170,6 +210,7 @@ public sealed partial class WaveformViewModel : ObservableObject
             MeasuredSignal = Traces.FirstOrDefault()?.Id;
         }
 
+        SyncToggles();
         Raise();
     }
 

@@ -306,6 +306,12 @@ public sealed partial class EditorViewModel : ObservableObject
     // ---------- 指令 ----------
 
     [RelayCommand]
+    private void ChooseTool(EditorTool tool) => SelectTool(tool);
+
+    [RelayCommand]
+    private void Place(ComponentKind kind) => SelectTool(EditorTool.Place, kind);
+
+    [RelayCommand]
     private void Rotate()
     {
         if (ActiveTool == EditorTool.Place && Selection.Count == 0)
