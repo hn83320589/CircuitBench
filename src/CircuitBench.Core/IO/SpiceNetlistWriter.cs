@@ -96,13 +96,21 @@ public static class SpiceNetlistWriter
             sb.Append($" AC {N(ac.Magnitude)} {N(ac.PhaseDegrees)}");
         }
 
-        switch (spec.Waveform)
+        if (spec.Waveform is { } waveform)
         {
-            case null:
-                break;
+            sb.Append(' ').Append(FormatWaveform(waveform));
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>暫態函數的網表文字，例如 SIN(0 1 1000 0 0 0)。</summary>
+    public static string FormatWaveform(Waveform waveform)
+    {
+        switch (waveform)
+        {
             case SineWaveform s:
-                sb.Append($" SIN({N(s.Vo)} {N(s.Va)} {N(s.Freq)} {N(s.Td)} {N(s.Theta)} {N(s.PhaseDeg)})");
-                break;
+                return $"SIN({N(s.Vo)} {N(s.Va)} {N(s.Freq)} {N(s.Td)} {N(s.Theta)} {N(s.PhaseDeg)})";
             case PulseWaveform p:
             {
                 // 省略尾端預設值（PER=0、PW=無限大），讓往返保持完全相同
@@ -116,18 +124,16 @@ public static class SpiceNetlistWriter
                     }
                 }
 
-                sb.Append($" PULSE({string.Join(" ", args.Select(N))})");
-                break;
+                return $"PULSE({string.Join(" ", args.Select(N))})";
             }
-            case PwlWaveform w:
-                sb.Append($" PWL({string.Join(" ", w.Points.Select(pt => $"{N(pt.T)} {N(pt.V)}"))})");
-                break;
-            case DcWaveform d:
-                sb.Append($" PWL(0 {N(d.Value)})");
-                break;
-        }
 
-        return sb.ToString();
+            case PwlWaveform w:
+                return $"PWL({string.Join(" ", w.Points.Select(pt => $"{N(pt.T)} {N(pt.V)}"))})";
+            case DcWaveform d:
+                return $"PWL(0 {N(d.Value)})";
+            default:
+                throw new NotSupportedException(waveform.GetType().Name);
+        }
     }
 
     private static string N(double v) =>
