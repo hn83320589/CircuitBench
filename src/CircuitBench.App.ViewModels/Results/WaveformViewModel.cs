@@ -31,6 +31,8 @@ public sealed class Trace
 
     public MinMaxPyramid Pyramid { get; }
 
+    internal MinMaxColumn[] ColumnBuffer { get; set; } = [];
+
     public string Unit => Id.Kind == SignalKind.Voltage ? "V" : "A";
 
     public string Label => Id.ToString();
@@ -314,6 +316,18 @@ public sealed partial class WaveformViewModel : ObservableObject
 
     /// <summary>給繪圖控制項：某條曲線在目前範圍、指定像素寬度下的抽樣欄。</summary>
     public MinMaxColumn[] Columns(Trace trace, int pixelWidth) => trace.Pyramid.Decimate(XMin, XMax, pixelWidth);
+
+    /// <summary>重繪用：結果寫入每條曲線自己的緩衝區（下次呼叫會覆寫），避免每幀配置記憶體。</summary>
+    public ReadOnlySpan<MinMaxColumn> ColumnsInto(Trace trace, int pixelWidth)
+    {
+        if (trace.ColumnBuffer.Length != pixelWidth)
+        {
+            trace.ColumnBuffer = new MinMaxColumn[pixelWidth];
+        }
+
+        trace.Pyramid.Decimate(XMin, XMax, trace.ColumnBuffer);
+        return trace.ColumnBuffer;
+    }
 
     public IReadOnlyList<Tick> XTicks(int maxTicks = 10) => AxisTicks.Linear(XMin, XMax, maxTicks, "s");
 

@@ -85,11 +85,19 @@ public sealed class MinMaxPyramid
     /// <summary>把 [xMin, xMax] 分成 pixelWidth 欄，第 i 欄涵蓋 [xMin+i·dx, xMin+(i+1)·dx)，最後一欄包含 xMax。</summary>
     public MinMaxColumn[] Decimate(double xMin, double xMax, int pixelWidth)
     {
-        var result = new MinMaxColumn[pixelWidth];
+        var result = new MinMaxColumn[Math.Max(0, pixelWidth)];
+        Decimate(xMin, xMax, result);
+        return result;
+    }
+
+    /// <summary>同 <see cref="Decimate(double,double,int)"/>，寫入呼叫端提供的緩衝區（重繪時避免每幀配置）。</summary>
+    public void Decimate(double xMin, double xMax, Span<MinMaxColumn> result)
+    {
+        var pixelWidth = result.Length;
         if (pixelWidth <= 0 || !(xMax > xMin) || _x.Length == 0)
         {
-            Array.Fill(result, MinMaxColumn.Empty);
-            return result;
+            result.Fill(MinMaxColumn.Empty);
+            return;
         }
 
         var dx = (xMax - xMin) / pixelWidth;
@@ -120,7 +128,6 @@ public sealed class MinMaxPyramid
             lo = Math.Max(lo, hi);
         }
 
-        return result;
     }
 
     /// <summary>暴力計算的對照版本（測試用）：與 Decimate 使用完全相同的欄邊界定義。</summary>

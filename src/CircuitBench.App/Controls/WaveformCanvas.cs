@@ -23,6 +23,10 @@ public sealed class WaveformCanvas : Control
     private const double BottomMargin = 36;
 
     private static readonly IBrush[] Brushes = WaveformSvgExporter.Palette.Select(c => (IBrush)new SolidColorBrush(Color.Parse(c))).ToArray();
+    private static readonly IPen[] TracePens = Brushes.Select(b => (IPen)new Pen(b, 1)).ToArray();
+
+    // 刻度文字每次重繪幾乎都相同：快取 FormattedText，避免每幀重新排版（CJK 字型排版成本高）
+    private readonly Dictionary<(string Text, double Size, IBrush Brush), FormattedText> _textCache = [];
     private static readonly IPen FramePen = new Pen(new SolidColorBrush(Color.FromRgb(140, 140, 140)), 1);
     private static readonly IPen GridLinePen = new Pen(new SolidColorBrush(Color.FromRgb(232, 232, 236)), 1);
     private static readonly IPen CursorAPen = new Pen(new SolidColorBrush(Color.FromRgb(0, 150, 80)), 1.5, new DashStyle([5, 3], 0));
@@ -200,14 +204,16 @@ public sealed class WaveformCanvas : Control
 
         // 曲線：每個像素欄畫出 min–max 垂直線，並連接相鄰欄
         using (context.PushClip(r))
+        using (context.PushRenderOptions(new RenderOptions { EdgeMode = EdgeMode.Aliased }))
         {
+            // 曲線以非反鋸齒繪製：每個像素欄本來就是一條垂直線段，反鋸齒幾乎看不出差別，卻佔大部分光柵化時間
             var width = (int)Math.Max(1, Math.Round(r.Width));
             foreach (var trace in vm.Traces)
             {
                 var axis = vm.Axes[trace.Unit];
                 var span = axis.Max - axis.Min;
                 double Sy(double v) => r.Bottom - (v - axis.Min) / span * r.Height;
-                var cols = vm.Columns(trace, width);
+                var cols = vm.ColumnsInto(trace, width);
                 var geometry = new StreamGeometry();
                 using (var g = geometry.Open())
                 {
@@ -245,7 +251,7 @@ public sealed class WaveformCanvas : Control
                     }
                 }
 
-                context.DrawGeometry(null, new Pen(Brushes[trace.ColorIndex % Brushes.Length], 1.5), geometry);
+                context.DrawGeometry(null, TracePens[trace.ColorIndex % TracePens.Length], geometry);
             }
 
             DrawCursor(context, vm, vm.CursorA, CursorAPen, "A");
@@ -274,8 +280,20 @@ public sealed class WaveformCanvas : Control
         DrawText(context, name, new Point(x + 3, r.Bottom - 18), pen.Brush!, 12);
     }
 
-    private static void DrawText(DrawingContext context, string text, Point at, IBrush brush, double size)
+    private void DrawText(DrawingContext context, string text, Point at, IBrush brush, double size)
     {
-        context.DrawText(new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Font, size, brush), at);
+        var key = (text, size, brush);
+        if (!_textCache.TryGetValue(key, out var formatted))
+        {
+            if (_textCache.Count > 512)
+            {
+                _textCache.Clear();
+            }
+
+            formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Font, size, brush);
+            _textCache[key] = formatted;
+        }
+
+        context.DrawText(formatted, at);
     }
 }

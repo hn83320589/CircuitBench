@@ -27,7 +27,9 @@ jobs:
 
       - name: Performance tests (informational)
         continue-on-error: true
-        run: dotnet test tests/CircuitBench.Performance.Tests -c Release --no-build --filter "Category=Performance" --logger "console;verbosity=normal"
+        run: |
+          dotnet test tests/CircuitBench.Performance.Tests -c Release --no-build --filter "Category=Performance" --logger "console;verbosity=normal"
+          dotnet test tests/CircuitBench.App.Headless.Tests -c Release --no-build --filter "Category=Performance" --logger "console;verbosity=normal"
 
       - name: Upload test results
         if: always()
