@@ -74,7 +74,7 @@ public sealed class Circuit
         foreach (var c in Components)
         {
             var o = other.Find(c.Name);
-            if (o is null || !c.Equals(o with { Name = c.Name }))
+            if (o is null || !Normalize(c).Equals(Normalize(o with { Name = c.Name })))
             {
                 return false;
             }
@@ -82,4 +82,8 @@ public sealed class Circuit
 
         return true;
     }
+
+    /// <summary>二極體模型名稱只是標籤（匯出時可能被改名以避免衝突），比較時忽略。</summary>
+    private static Component Normalize(Component c) =>
+        c is Diode d ? d with { Model = d.Model with { ModelName = string.Empty } } : c;
 }

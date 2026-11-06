@@ -66,8 +66,8 @@ public static class EngineeringNotation
             }
         }
 
-        var number = double.Parse(s.AsSpan(0, i), NumberStyles.Float, CultureInfo.InvariantCulture);
-        var scale = ReadSuffix(s, ref i);
+        var numberEnd = i;
+        var suffixExponent = ReadSuffix(s, ref i);
 
         for (var j = i; j < s.Length; j++)
         {
@@ -78,7 +78,7 @@ public static class EngineeringNotation
             }
         }
 
-        value = number * scale;
+        value = Combine(s[..numberEnd], suffixExponent);
         if (!double.IsFinite(value))
         {
             error = new ParseError(offset, $"「{text.Trim()}」超出可表示的數值範圍。");
@@ -120,38 +120,54 @@ public static class EngineeringNotation
         return text + suffix + unit;
     }
 
-    private static double ReadSuffix(string s, ref int i)
+    /// <summary>
+    /// 以十進位文字合併指數後再解析，讓 "5u" 得到與 "5e-6" 相同（最接近）的 double，
+    /// 避免 5 × 1e-6 的乘法捨入誤差。
+    /// </summary>
+    private static double Combine(string number, int suffixExponent)
+    {
+        if (suffixExponent == 0)
+        {
+            return double.Parse(number, NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
+        var e = number.IndexOfAny(['e', 'E']);
+        var mantissa = e < 0 ? number : number[..e];
+        var exponent = e < 0 ? 0 : int.Parse(number[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        return double.Parse($"{mantissa}E{exponent + suffixExponent}", NumberStyles.Float, CultureInfo.InvariantCulture);
+    }
+
+    private static int ReadSuffix(string s, ref int i)
     {
         if (i >= s.Length)
         {
-            return 1;
+            return 0;
         }
 
         if (s.Length - i >= 3 && string.Compare(s, i, "meg", 0, 3, StringComparison.OrdinalIgnoreCase) == 0)
         {
             i += 3;
-            return 1e6;
+            return 6;
         }
 
-        var scale = char.ToLowerInvariant(s[i]) switch
+        var exponent = char.ToLowerInvariant(s[i]) switch
         {
-            'f' => 1e-15,
-            'p' => 1e-12,
-            'n' => 1e-9,
-            'u' or 'µ' or 'μ' => 1e-6,
-            'm' => 1e-3,
-            'k' => 1e3,
-            'g' => 1e9,
-            't' => 1e12,
-            _ => 0.0,
+            'f' => -15,
+            'p' => -12,
+            'n' => -9,
+            'u' or 'µ' or 'μ' => -6,
+            'm' => -3,
+            'k' => 3,
+            'g' => 9,
+            't' => 12,
+            _ => 0,
         };
 
-        if (scale == 0)
+        if (exponent != 0)
         {
-            return 1;
+            i++;
         }
 
-        i++;
-        return scale;
+        return exponent;
     }
 }

@@ -46,13 +46,13 @@ public static class RandomCircuits
                     if (vForest.Union(a, b))
                     {
                         components.Add(new VoltageSource($"V{++id}", Node(a), Node(b),
-                            new SourceSpec(rng.NextDouble() * 20 - 10, new DcWaveform(0), Ac())));
+                            new SourceSpec(rng.NextDouble() * 20 - 10, null, Ac())));
                     }
 
                     break;
                 case 3:
                     components.Add(new CurrentSource($"I{++id}", Node(a), Node(b),
-                        new SourceSpec(rng.NextDouble() * 0.02 - 0.01, new DcWaveform(0), Ac())));
+                        new SourceSpec(rng.NextDouble() * 0.02 - 0.01, null, Ac())));
                     break;
                 case 4:
                     if (vForest.Union(a, b))
