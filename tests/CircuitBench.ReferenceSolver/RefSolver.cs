@@ -48,12 +48,13 @@ public sealed class RefSolver
 
     public int Size => _nodeIndex.Count + _branchIndex.Count;
 
-    public IReadOnlyDictionary<string, double> OperatingPoint(double sourceTime = 0) =>
-        ToResult(SolveNonlinear(sourceTime, null, new double[Size]));
+    /// <summary>直流工作點，電源取直流值（RefElement.Value）。</summary>
+    public IReadOnlyDictionary<string, double> OperatingPoint() =>
+        ToResult(SolveNonlinear(double.NaN, null, new double[Size]));
 
     public IReadOnlyDictionary<string, Complex> Ac(double frequency)
     {
-        var op = SolveNonlinear(0, null, new double[Size]);
+        var op = SolveNonlinear(double.NaN, null, new double[Size]);
         var n = Size;
         var a = new Complex[n, n];
         var b = new Complex[n];
@@ -244,7 +245,7 @@ public sealed class RefSolver
                     StampConductance(a, p, q, 1.0 / e.Value);
                     break;
                 case RefKind.Switch:
-                    StampConductance(a, p, q, 1.0 / (e.SwitchOn!(t) ? e.Ron : e.Roff));
+                    StampConductance(a, p, q, 1.0 / (e.SwitchOn!(double.IsNaN(t) ? 0 : t) ? e.Ron : e.Roff));
                     break;
                 case RefKind.Capacitor:
                     if (tran is { } tc)
@@ -299,13 +300,13 @@ public sealed class RefSolver
                 {
                     var k = _branchIndex[e.Name];
                     StampBranchIncidence(a, p, q, k);
-                    b[k] += e.SourceAt(t);
+                    b[k] += double.IsNaN(t) ? e.Value : e.SourceAt(t);
                     break;
                 }
 
                 case RefKind.CurrentSource:
                 {
-                    var i = e.SourceAt(t);
+                    var i = double.IsNaN(t) ? e.Value : e.SourceAt(t);
                     if (p >= 0) b[p] -= i;
                     if (q >= 0) b[q] += i;
                     break;
